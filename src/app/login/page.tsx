@@ -1,12 +1,13 @@
 'use client';
 
-import type React from 'react';
+import { Suspense, useState } from 'react';
 import Image from 'next/image';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Toaster, toast } from 'sonner';
 import {
   Card,
   CardContent,
@@ -14,33 +15,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { InfoIcon } from 'lucide-react';
+import { createBrowserClient } from '@/lib/supabase/client';
 
-const TEST_CREDENTIALS = {
-  user: { email: 'user@mail.apu.edu.my', password: 'user123', role: 'user' },
-  staff: {
-    email: 'staff@mail.apu.edu.my',
-    password: 'staff123',
-    role: 'staff',
-  },
-  admin: {
-    email: 'admin@mail.apu.edu.my',
-    password: 'admin123',
-    role: 'admin',
-  },
-};
-
-export default function LoginPage() {
+/* ---------------------- Login Inner Component ---------------------- */
+/* This component actually uses useSearchParams(), so it’s wrapped in Suspense */
+function LoginInner() {
   const router = useRouter();
+  const params = useSearchParams();
+  const redirect = params.get('redirect') || '/';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -51,25 +36,57 @@ export default function LoginPage() {
     setIsLoading(true);
     setError('');
 
-    setTimeout(() => {
-      const matchedAccount = Object.values(TEST_CREDENTIALS).find(
-        (cred) => cred.email === email && cred.password === password
-      );
+    try {
+      const supabase = createBrowserClient();
 
-      if (matchedAccount) {
-        localStorage.setItem('auth_token', 'demo_token');
-        localStorage.setItem('user_email', email);
-        localStorage.setItem('user_role', matchedAccount.role);
-        if (matchedAccount.role === 'admin') {
-          router.push('/admin');
-        } else {
-          router.push('/');
-        }
-      } else {
-        setError('Invalid email or password');
-        setIsLoading(false);
-      }
-    }, 1000);
+      // 1) Authenticate user
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+
+      // 2) Bridge session tokens for SSR middleware
+      const session = data.session;
+      const bridge = await fetch('/api/auth/set-session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          access_token: session?.access_token,
+          refresh_token: session?.refresh_token,
+        }),
+      });
+      if (!bridge.ok) throw new Error('Failed to set auth cookies');
+
+      // 3) Fetch user role
+      const res = await fetch(
+        `/api/users/role?email=${encodeURIComponent(email)}`
+      );
+      const { role } = await res.json();
+
+      // 4) Cache locally + toast
+      localStorage.setItem('user_email', email);
+      localStorage.setItem('user_role', role);
+      toast.success('Logged in successfully');
+
+      // 5) Redirect based on role
+      const target =
+        redirect && redirect !== '/login'
+          ? redirect
+          : role === 'admin'
+          ? '/admin'
+          : role === 'staff'
+          ? '/staff'
+          : '/';
+      router.replace(target);
+      return;
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Invalid email or password');
+      setError(err.message || 'Invalid email or password');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -91,6 +108,7 @@ export default function LoginPage() {
           </CardTitle>
           <CardDescription>Sign in to book sports facilities</CardDescription>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
@@ -104,6 +122,7 @@ export default function LoginPage() {
                 required
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -121,31 +140,14 @@ export default function LoginPage() {
               </Alert>
             )}
 
-            <Dialog>
-              <DialogTrigger asChild>
-                <button
-                  type="button"
-                  className="text-sm text-primary hover:underline"
-                >
-                  Forgot password?
-                </button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Need Help?</DialogTitle>
-                  <DialogDescription className="pt-4">
-                    Having troubles? No worries! You can reach us at{' '}
-                    <a
-                      href="mailto:assist@staffemail.apu.edu.my"
-                      className="text-primary font-medium hover:underline"
-                    >
-                      assist@staffemail.apu.edu.my
-                    </a>{' '}
-                    and our team will assist you.
-                  </DialogDescription>
-                </DialogHeader>
-              </DialogContent>
-            </Dialog>
+            <div className="flex justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-sm text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign In'}
@@ -179,6 +181,21 @@ export default function LoginPage() {
           </Alert>
         </CardContent>
       </Card>
+
+      <Toaster />
     </div>
+  );
+}
+
+/* ---------------------- Export wrapped with Suspense ---------------------- */
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-center p-6 text-muted-foreground">Loading...</div>
+      }
+    >
+      <LoginInner />
+    </Suspense>
   );
 }

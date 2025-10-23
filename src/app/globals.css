@@ -5,24 +5,26 @@
 
 :root {
   /* Updated to APU blue theme colors */
-  --background: oklch(0.985 0.005 240); /* #F5F7FB */
+  /* Made background more grey (0.92) to reduce brightness */
+  --background: oklch(0.92 0.01 240); /* More grey instead of pure white */
   --foreground: oklch(0.2 0.02 240); /* #0F172A */
-  --card: oklch(1 0 0);
+  /* Made card background slightly lighter than main background */
+  --card: oklch(0.95 0.008 240); /* Slightly lighter than background */
   --card-foreground: oklch(0.2 0.02 240);
-  --popover: oklch(1 0 0);
+  --popover: oklch(0.95 0.008 240);
   --popover-foreground: oklch(0.2 0.02 240);
   --primary: oklch(0.45 0.15 240); /* #0A66C2 */
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0.005 240);
+  --secondary: oklch(0.93 0.01 240);
   --secondary-foreground: oklch(0.2 0.02 240);
-  --muted: oklch(0.97 0.005 240);
+  --muted: oklch(0.93 0.01 240);
   --muted-foreground: oklch(0.556 0.01 240);
   --accent: oklch(0.6 0.18 240); /* #1E90FF */
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.9 0.005 240);
-  --input: oklch(0.95 0.005 240);
+  --border: oklch(0.85 0.01 240);
+  --input: oklch(0.9 0.01 240);
   --ring: oklch(0.45 0.15 240);
   --chart-1: oklch(0.45 0.15 240);
   --chart-2: oklch(0.6 0.18 240);
@@ -30,13 +32,13 @@
   --chart-4: oklch(0.7 0.1 240);
   --chart-5: oklch(0.5 0.14 240);
   --radius: 1rem; /* rounded-2xl */
-  --sidebar: oklch(0.985 0.005 240);
+  --sidebar: oklch(0.95 0.008 240);
   --sidebar-foreground: oklch(0.2 0.02 240);
   --sidebar-primary: oklch(0.45 0.15 240);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0.005 240);
+  --sidebar-accent: oklch(0.93 0.01 240);
   --sidebar-accent-foreground: oklch(0.2 0.02 240);
-  --sidebar-border: oklch(0.9 0.005 240);
+  --sidebar-border: oklch(0.85 0.01 240);
   --sidebar-ring: oklch(0.45 0.15 240);
 }
 
@@ -55,7 +57,8 @@
   --muted-foreground: oklch(0.7 0.01 240);
   --accent: oklch(0.6 0.18 240);
   --accent-foreground: oklch(0.15 0.02 240);
-  --destructive: oklch(0.396 0.141 25.723);
+  /* Made destructive color lighter and more visible in dark mode */
+  --destructive: oklch(0.7 0.2 25);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.25 0.02 240);
   --input: oklch(0.25 0.02 240);

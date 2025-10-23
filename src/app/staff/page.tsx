@@ -46,36 +46,34 @@ export default function StaffPage() {
           </div>
 
           <Tabs defaultValue="requests" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto border-2 bg-card">
+            <TabsList className="w-full h-auto border-2 bg-card p-1 lg:grid lg:grid-cols-4 flex overflow-x-auto">
               <TabsTrigger
                 value="requests"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <ClipboardListIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Pending Requests</span>
-                <span className="sm:hidden">Requests</span>
+                <span className="text-xs lg:text-sm">Requests</span>
               </TabsTrigger>
               <TabsTrigger
                 value="issue-return"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <ArrowLeftRightIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Issue/Return</span>
-                <span className="sm:hidden">Issue</span>
+                <span className="text-xs lg:text-sm">Issue/Return</span>
               </TabsTrigger>
               <TabsTrigger
                 value="inventory"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <PackageIcon className="h-4 w-4" />
-                <span>Inventory</span>
+                <span className="text-xs lg:text-sm">Inventory</span>
               </TabsTrigger>
               <TabsTrigger
                 value="calendar"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <CalendarIcon className="h-4 w-4" />
-                <span>Bookings</span>
+                <span className="text-xs lg:text-sm">Bookings</span>
               </TabsTrigger>
             </TabsList>
 

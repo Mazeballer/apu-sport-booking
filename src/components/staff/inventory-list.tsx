@@ -30,7 +30,7 @@ function getAvailabilityTextColor(percent: number): string {
   if (percent >= 70) return 'text-emerald-700 dark:text-emerald-400';
   if (percent >= 40) return 'text-amber-700 dark:text-amber-400';
   if (percent >= 10) return 'text-orange-700 dark:text-orange-400';
-  return 'text-rose-700 dark:text-rose-400';
+  return 'text-rose-600 dark:text-rose-400';
 }
 
 export function InventoryList() {

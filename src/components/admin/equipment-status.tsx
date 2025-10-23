@@ -20,9 +20,12 @@ import {
   CheckCircle,
   Search,
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Card, CardContent } from '@/components/ui/card';
 
 export function EquipmentStatus() {
   const [searchQuery, setSearchQuery] = useState('');
+  const isMobile = useIsMobile();
 
   const filterRequests = (requests: typeof equipmentRequests) => {
     if (!searchQuery.trim()) return requests;
@@ -154,6 +157,69 @@ export function EquipmentStatus() {
               <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No overdue equipment</p>
             </div>
+          ) : isMobile ? (
+            <div className="space-y-4">
+              {filterRequests(overdueEquipment).map((req) => {
+                const daysOverdue = calculateDaysOverdue(req.requestDate);
+                return (
+                  <Card key={req.id}>
+                    <CardContent className="p-4 space-y-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Student</p>
+                        <p className="font-medium break-all">{req.userEmail}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Equipment
+                          </p>
+                          <p className="font-medium">{req.equipmentName}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Facility
+                          </p>
+                          <p className="font-medium">{req.facilityName}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Borrowed
+                          </p>
+                          <p className="font-medium">{req.quantityBorrowed}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Outstanding
+                          </p>
+                          <Badge
+                            variant="secondary"
+                            className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                          >
+                            {req.quantityBorrowed - req.quantityReturned}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Issued Date
+                          </p>
+                          <p className="font-medium text-sm">
+                            {new Date(req.requestDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Days Overdue
+                          </p>
+                          <Badge variant="destructive">
+                            {daysOverdue} days
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -206,6 +272,62 @@ export function EquipmentStatus() {
               <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No damaged equipment reported</p>
             </div>
+          ) : isMobile ? (
+            <div className="space-y-4">
+              {filterRequests(damagedEquipment).map((req) => (
+                <Card key={req.id}>
+                  <CardContent className="p-4 space-y-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Student</p>
+                      <p className="font-medium break-all">{req.userEmail}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Equipment
+                        </p>
+                        <p className="font-medium">{req.equipmentName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Facility
+                        </p>
+                        <p className="font-medium">{req.facilityName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Qty Damaged
+                        </p>
+                        <Badge
+                          variant="secondary"
+                          className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"
+                        >
+                          {req.quantityReturned}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Returned Date
+                        </p>
+                        <p className="font-medium text-sm">
+                          {req.returnedAt
+                            ? new Date(req.returnedAt).toLocaleDateString()
+                            : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Damage Notes
+                      </p>
+                      <p className="text-sm mt-1">
+                        {req.damageNotes || 'No notes provided'}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -255,6 +377,60 @@ export function EquipmentStatus() {
               <PackageX className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No lost equipment reported</p>
             </div>
+          ) : isMobile ? (
+            <div className="space-y-4">
+              {filterRequests(lostEquipment).map((req) => (
+                <Card key={req.id}>
+                  <CardContent className="p-4 space-y-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Student</p>
+                      <p className="font-medium break-all">{req.userEmail}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Equipment
+                        </p>
+                        <p className="font-medium">{req.equipmentName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Facility
+                        </p>
+                        <p className="font-medium">{req.facilityName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Qty Lost
+                        </p>
+                        <Badge
+                          variant="secondary"
+                          className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                        >
+                          {req.quantityReturned}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Reported Date
+                        </p>
+                        <p className="font-medium text-sm">
+                          {req.returnedAt
+                            ? new Date(req.returnedAt).toLocaleDateString()
+                            : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Notes</p>
+                      <p className="text-sm mt-1">
+                        {req.damageNotes || 'No notes provided'}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -303,6 +479,61 @@ export function EquipmentStatus() {
             <div className="text-center py-12 text-muted-foreground">
               <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No return history yet</p>
+            </div>
+          ) : isMobile ? (
+            <div className="space-y-4">
+              {filterRequests(returnHistory).map((req) => (
+                <Card key={req.id}>
+                  <CardContent className="p-4 space-y-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Student</p>
+                      <p className="font-medium break-all">{req.userEmail}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Equipment
+                        </p>
+                        <p className="font-medium">{req.equipmentName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Facility
+                        </p>
+                        <p className="font-medium">{req.facilityName}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Qty Returned
+                        </p>
+                        <p className="font-medium">{req.quantityReturned}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Condition
+                        </p>
+                        {getConditionBadge(req.returnCondition)}
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Returned Date
+                        </p>
+                        <p className="font-medium text-sm">
+                          {req.returnedAt
+                            ? new Date(req.returnedAt).toLocaleDateString()
+                            : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    {req.damageNotes && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Notes</p>
+                        <p className="text-sm mt-1">{req.damageNotes}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           ) : (
             <Table>

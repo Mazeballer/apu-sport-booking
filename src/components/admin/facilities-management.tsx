@@ -52,6 +52,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ImageUpload } from '@/components/image-upload';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Card, CardContent } from '@/components/ui/card';
 
 // Hash function to generate consistent color index from sport name
 function hashString(str: string): number {
@@ -110,6 +112,7 @@ function getSportTypeColor(sportType: string): string {
 
 export function FacilitiesManagement() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
   const [deletingFacility, setDeletingFacility] = useState<Facility | null>(
@@ -404,31 +407,32 @@ export function FacilitiesManagement() {
         </Dialog>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Location</TableHead>
-            <TableHead>Capacity</TableHead>
-            <TableHead>Courts</TableHead>
-            <TableHead>Equipment</TableHead>
-            <TableHead>Hours</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+      {isMobile ? (
+        <div className="space-y-4">
           {facilities.map((facility) => (
-            <TableRow key={facility.id}>
-              <TableCell className="font-medium">{facility.name}</TableCell>
-              <TableCell>
-                {facility.isMultiSport ? (
-                  <div className="flex flex-col gap-1">
-                    <Badge className="bg-purple-700 text-white hover:bg-purple-800 border-purple-700">
-                      Multi-Sport
-                    </Badge>
-                    <div className="flex flex-wrap gap-1">
+            <Card key={facility.id} className="overflow-hidden">
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-bold text-lg">{facility.name}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {facility.location} • {facility.locationType}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-2">
+                    <Switch
+                      checked={facility.status === 'active'}
+                      onCheckedChange={() => handleStatusToggle(facility)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {facility.isMultiSport ? (
+                    <>
+                      <Badge className="bg-purple-700 text-white hover:bg-purple-800 border-purple-700">
+                        Multi-Sport
+                      </Badge>
                       {facility.courts?.[0]?.supportedSports?.map((sport) => (
                         <Badge
                           key={sport}
@@ -438,65 +442,62 @@ export function FacilitiesManagement() {
                           {sport}
                         </Badge>
                       ))}
-                    </div>
+                    </>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className={getSportTypeColor(facility.type)}
+                    >
+                      {facility.type}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Capacity</p>
+                    <p className="font-medium">{facility.capacity} people</p>
                   </div>
-                ) : (
-                  <Badge
-                    variant="outline"
-                    className={getSportTypeColor(facility.type)}
-                  >
-                    {facility.type}
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell>
-                <div>
-                  <p>{facility.location}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {facility.locationType}
-                  </p>
+                  <div>
+                    <p className="text-muted-foreground">Courts</p>
+                    <p className="font-medium">
+                      {facility.courts?.length || 0}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Equipment</p>
+                    {facility.availableEquipment &&
+                    facility.availableEquipment.length > 0 ? (
+                      <Badge className="hover:bg-blue-600 text-white bg-blue-600 bg-primary mt-1">
+                        {facility.availableEquipment.length}{' '}
+                        {facility.availableEquipment.length === 1
+                          ? 'item'
+                          : 'items'}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground border-muted-foreground/30 mt-1"
+                      >
+                        None
+                      </Badge>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Hours</p>
+                    <p className="font-medium text-xs">
+                      {facility.operatingHours.start} -{' '}
+                      {facility.operatingHours.end}
+                    </p>
+                  </div>
                 </div>
-              </TableCell>
-              <TableCell>{facility.capacity}</TableCell>
-              <TableCell>{facility.courts?.length || 0}</TableCell>
-              <TableCell>
-                {facility.availableEquipment &&
-                facility.availableEquipment.length > 0 ? (
-                  <Badge className="hover:bg-blue-600 text-white bg-blue-60000 bg-primary">
-                    {facility.availableEquipment.length}{' '}
-                    {facility.availableEquipment.length === 1
-                      ? 'item'
-                      : 'items'}
-                  </Badge>
-                ) : (
-                  <Badge
-                    variant="outline"
-                    className="text-muted-foreground border-muted-foreground/30"
-                  >
-                    None
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell className="text-sm">
-                {facility.operatingHours.start} - {facility.operatingHours.end}
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={facility.status === 'active'}
-                    onCheckedChange={() => handleStatusToggle(facility)}
-                  />
-                  <span className="text-sm capitalize mx-0.5">
-                    {facility.status || 'active'}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
+
+                <div className="flex gap-2 pt-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => openEdit(facility)}
+                    className="flex-1"
                   >
                     <EditIcon className="h-4 w-4 mr-1" />
                     Edit
@@ -505,17 +506,131 @@ export function FacilitiesManagement() {
                     variant="outline"
                     size="sm"
                     onClick={() => setDeletingFacility(facility)}
-                    className="text-destructive hover:text-destructive"
+                    className="flex-1 text-destructive hover:text-destructive"
                   >
                     <TrashIcon className="h-4 w-4 mr-1" />
                     Delete
                   </Button>
                 </div>
-              </TableCell>
-            </TableRow>
+              </CardContent>
+            </Card>
           ))}
-        </TableBody>
-      </Table>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Capacity</TableHead>
+              <TableHead>Courts</TableHead>
+              <TableHead>Equipment</TableHead>
+              <TableHead>Hours</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {facilities.map((facility) => (
+              <TableRow key={facility.id}>
+                <TableCell className="font-medium">{facility.name}</TableCell>
+                <TableCell>
+                  {facility.isMultiSport ? (
+                    <div className="flex flex-col gap-1">
+                      <Badge className="bg-purple-700 text-white hover:bg-purple-800 border-purple-700">
+                        Multi-Sport
+                      </Badge>
+                      <div className="flex flex-wrap gap-1">
+                        {facility.courts?.[0]?.supportedSports?.map((sport) => (
+                          <Badge
+                            key={sport}
+                            variant="outline"
+                            className={`text-xs ${getSportTypeColor(sport)}`}
+                          >
+                            {sport}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className={getSportTypeColor(facility.type)}
+                    >
+                      {facility.type}
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <p>{facility.location}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {facility.locationType}
+                    </p>
+                  </div>
+                </TableCell>
+                <TableCell>{facility.capacity}</TableCell>
+                <TableCell>{facility.courts?.length || 0}</TableCell>
+                <TableCell>
+                  {facility.availableEquipment &&
+                  facility.availableEquipment.length > 0 ? (
+                    <Badge className="hover:bg-blue-600 text-white bg-blue-600 bg-primary">
+                      {facility.availableEquipment.length}{' '}
+                      {facility.availableEquipment.length === 1
+                        ? 'item'
+                        : 'items'}
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-muted-foreground border-muted-foreground/30"
+                    >
+                      None
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {facility.operatingHours.start} -{' '}
+                  {facility.operatingHours.end}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={facility.status === 'active'}
+                      onCheckedChange={() => handleStatusToggle(facility)}
+                    />
+                    <span className="text-sm capitalize mx-0.5">
+                      {facility.status || 'active'}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(facility)}
+                    >
+                      <EditIcon className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDeletingFacility(facility)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <TrashIcon className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
 
       {editingFacility && (
         <Dialog

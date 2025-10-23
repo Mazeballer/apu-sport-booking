@@ -36,41 +36,45 @@ enum EquipReqStatus {
    Core
    =========================== */
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  role      Role     @default(student)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid()) // same as Supabase Auth user.id
+  email      String   @unique
+  role       Role     @default(student)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
+  // Relations
   bookings   Booking[]
   decisions  EquipmentRequest[] @relation("Decider")
   pushSubs   PushSubscription[]
 }
 
+/* ===========================
+   Facility Management
+   =========================== */
 model Facility {
   id        String   @id @default(uuid())
   name      String
-  type      String             // e.g., "Indoor Hall", "Outdoor Court"
+  type      String
   location  String
   rules     String?
-  photos    String[]           // Supabase Storage paths
-  active    Boolean  @default(true)  // <- use this toggle to hide/show in UI
+  photos    String[]
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
   schedules FacilitySchedule[]
   courts    Court[]
-  bookings  Booking[]          // <- keeps the opposite relation for Booking
-  equipment Equipment[]        // <- keeps the opposite relation for Equipment
+  bookings  Booking[]
+  equipment Equipment[]
 }
 
 model FacilitySchedule {
   id         String   @id @default(uuid())
   facilityId String
-  dayOfWeek  Int      // 0..6 (Sun..Sat)
-  openTime   String   // "08:00"
-  closeTime  String   // "22:00"
+  dayOfWeek  Int
+  openTime   String
+  closeTime  String
 
   facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-
   @@index([facilityId, dayOfWeek])
 }
 
@@ -80,32 +84,32 @@ model FacilitySchedule {
 model Court {
   id               String   @id @default(uuid())
   facilityId       String
-  name             String   // e.g., "Court 1", "Hall A"
-  conflictGroupId  String?  // same value across sub-spaces that share floor (optional)
-  active           Boolean  @default(true) // <- optional per-court toggle
+  name             String
+  conflictGroupId  String?
+  active           Boolean  @default(true)
 
   facility         Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   supportedSports  CourtSport[]
   bookings         Booking[]
 
-  @@unique([facilityId, name]) // unique court name per facility
+  @@unique([facilityId, name])
   @@index([facilityId])
   @@index([conflictGroupId])
   @@index([active])
 }
 
 model Sport {
-  id                  String   @id @default(uuid())
-  name                String   @unique   // e.g., "Futsal", "Volleyball", "Badminton"
-  minDurationMinutes  Int      @default(60)
-  maxDurationMinutes  Int      @default(120)
-  createdAt           DateTime @default(now())
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  minDurationMinutes Int      @default(60)
+  maxDurationMinutes Int      @default(120)
+  createdAt          DateTime @default(now())
 
   courts   CourtSport[]
   bookings Booking[]
 }
 
-// Junction: a court supports many sports
+// Junction: many-to-many between Court and Sport
 model CourtSport {
   courtId String
   sportId String
@@ -141,7 +145,7 @@ model Booking {
   @@index([facilityId, start])
   @@index([courtId, start])
   @@index([userId, start])
-  @@unique([courtId, start, end]) // same exact slot on same court
+  @@unique([courtId, start, end])
 }
 
 /* ===========================
@@ -152,7 +156,7 @@ model Equipment {
   facilityId   String
   name         String
   qtyTotal     Int
-  qtyAvailable Int     // Keep in sync on issue/return in your API
+  qtyAvailable Int
   notes        String?
 
   facility     Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
@@ -172,8 +176,8 @@ model EquipmentRequest {
 
   booking    Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   items      EquipmentRequestItem[]
-
   decider    User?          @relation("Decider", fields: [decidedBy], references: [id])
+
   @@index([status, createdAt])
 }
 

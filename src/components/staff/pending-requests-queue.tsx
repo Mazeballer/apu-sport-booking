@@ -1,39 +1,48 @@
-"use client"
+'use client';
 
-import { equipmentRequests } from "@/lib/data"
-import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { CheckIcon, XIcon, PackageIcon, CalendarIcon } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { Separator } from "@/components/ui/separator"
-import { Card } from "@/components/ui/card"
+import { equipmentRequests } from '@/lib/data';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { CheckIcon, XIcon, PackageIcon, CalendarIcon } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Separator } from '@/components/ui/separator';
+import { Card } from '@/components/ui/card';
 
 export function PendingRequestsQueue() {
-  const { toast } = useToast()
-  const pendingRequests = equipmentRequests.filter((r) => r.status === "pending")
+  const { toast } = useToast();
+  const pendingRequests = equipmentRequests.filter(
+    (r) => r.status === 'pending'
+  );
 
   const handleApprove = (requestId: string) => {
-    const request = equipmentRequests.find((r) => r.id === requestId)
+    const request = equipmentRequests.find((r) => r.id === requestId);
     if (request) {
-      request.status = "approved"
+      request.status = 'approved';
       toast({
-        title: "Request Approved",
+        title: 'Request Approved',
         description: `${request.equipmentName} request for ${request.userEmail} has been approved.`,
-      })
+      });
     }
-  }
+  };
 
   const handleDeny = (requestId: string) => {
-    const request = equipmentRequests.find((r) => r.id === requestId)
+    const request = equipmentRequests.find((r) => r.id === requestId);
     if (request) {
-      request.status = "denied"
+      request.status = 'denied';
       toast({
-        title: "Request Denied",
+        title: 'Request Denied',
         description: `${request.equipmentName} request for ${request.userEmail} has been denied.`,
-        variant: "destructive",
-      })
+        variant: 'destructive',
+      });
     }
-  }
+  };
 
   if (pendingRequests.length === 0) {
     return (
@@ -42,9 +51,11 @@ export function PendingRequestsQueue() {
           <CheckIcon className="w-8 h-8 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-semibold mb-2">All caught up!</h3>
-        <p className="text-muted-foreground">No pending equipment requests at the moment</p>
+        <p className="text-muted-foreground">
+          No pending equipment requests at the moment
+        </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -83,9 +94,13 @@ export function PendingRequestsQueue() {
                 </TableCell>
                 <TableCell>
                   {request.notes ? (
-                    <span className="text-sm text-muted-foreground">{request.notes}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {request.notes}
+                    </span>
                   ) : (
-                    <span className="text-sm text-muted-foreground italic">No notes</span>
+                    <span className="text-sm text-muted-foreground italic">
+                      No notes
+                    </span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">
@@ -126,7 +141,9 @@ export function PendingRequestsQueue() {
                   <PackageIcon className="h-5 w-5 text-primary" />
                   <h3 className="font-bold">{request.equipmentName}</h3>
                 </div>
-                <p className="text-sm text-muted-foreground">{request.facilityName}</p>
+                <p className="text-sm text-muted-foreground">
+                  {request.facilityName}
+                </p>
               </div>
 
               <Separator />
@@ -138,7 +155,9 @@ export function PendingRequestsQueue() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Request Date</span>
-                  <span className="font-medium">{new Date(request.requestDate).toLocaleDateString()}</span>
+                  <span className="font-medium">
+                    {new Date(request.requestDate).toLocaleDateString()}
+                  </span>
                 </div>
                 {request.notes && (
                   <div>
@@ -173,5 +192,5 @@ export function PendingRequestsQueue() {
         ))}
       </div>
     </>
-  )
+  );
 }

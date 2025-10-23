@@ -1,6 +1,6 @@
-'use client';
-
-import { AuthGuard } from '@/components/auth-guard';
+import { redirect } from 'next/navigation';
+import { createServerSupabase } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FacilitiesManagement } from '@/components/admin/facilities-management';
@@ -9,9 +9,7 @@ import { EquipmentManagement } from '@/components/admin/equipment-management';
 import { EquipmentStatus } from '@/components/admin/equipment-status';
 import { AnalyticsDashboard } from '@/components/admin/analytics-dashboard';
 import { UserManagement } from '@/components/admin/user-management';
-import { getUserRole } from '@/lib/auth';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Navbar } from '@/components/navbar';
 import {
   BuildingIcon,
   ClockIcon,
@@ -20,34 +18,28 @@ import {
   UsersIcon,
   WrenchIcon,
 } from 'lucide-react';
-import { Navbar } from '@/components/navbar';
 
-export default function AdminPage() {
-  const router = useRouter();
-  const role = getUserRole();
-  const [isMobile, setIsMobile] = useState(false);
+// Server-side guard: check session + role before rendering
+export default async function AdminPage() {
+  const supabase = await createServerSupabase();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) redirect('/login?redirect=/admin');
 
-  useEffect(() => {
-    if (role !== 'admin') {
-      router.push('/');
-    }
-  }, [role, router]);
+  const email = session.user.email!;
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { role: true },
+  });
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  if (role !== 'admin') {
-    return null;
+  if (!user || user.role !== 'admin') {
+    redirect('/'); // not authorized
   }
 
+  // render as normal
   return (
-    <AuthGuard>
+    <>
       <Navbar />
       <div className="min-h-screen bg-background">
         <main className="container mx-auto px-4 py-8">
@@ -58,52 +50,49 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <Tabs
-            defaultValue={isMobile ? 'facilities' : 'analytics'}
-            className="space-y-6"
-          >
-            <TabsList className="w-full h-auto border-2 lg:grid lg:grid-cols-6 flex overflow-x-auto">
+          <Tabs defaultValue="facilities" className="space-y-6">
+            <TabsList className="w-full h-auto border-2 lg:grid lg:grid-cols-6 flex overflow-x-auto p-1">
               <TabsTrigger
                 value="analytics"
-                className="gap-2 py-3 hidden lg:flex data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap"
+                className="py-3 px-3 hidden lg:flex lg:gap-2 data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap rounded-lg"
               >
                 <TrendingUpIcon className="h-4 w-4" />
                 <span>Analytics</span>
               </TabsTrigger>
               <TabsTrigger
                 value="facilities"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <BuildingIcon className="h-4 w-4" />
-                <span>Facilities</span>
+                <span className="text-xs lg:text-sm">Facilities</span>
               </TabsTrigger>
               <TabsTrigger
                 value="hours"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <ClockIcon className="h-4 w-4" />
-                <span>Hours</span>
+                <span className="text-xs lg:text-sm">Hours</span>
               </TabsTrigger>
               <TabsTrigger
                 value="equipment"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <PackageIcon className="h-4 w-4" />
-                <span>Inventory</span>
+                <span className="text-xs lg:text-sm">Inventory</span>
               </TabsTrigger>
               <TabsTrigger
                 value="equipment-status"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <WrenchIcon className="h-4 w-4" />
-                <span>Status</span>
+                <span className="text-xs lg:text-sm">Status</span>
               </TabsTrigger>
               <TabsTrigger
                 value="users"
-                className="gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0"
+                className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
               >
                 <UsersIcon className="h-4 w-4" />
-                <span>Users</span>
+                <span className="text-xs lg:text-sm">Users</span>
               </TabsTrigger>
             </TabsList>
 
@@ -128,9 +117,9 @@ export default function AdminPage() {
             <TabsContent value="hours">
               <Card className="rounded-2xl shadow-md">
                 <CardHeader>
-                  <CardTitle>Operating Hours & Blackouts</CardTitle>
+                  <CardTitle>Operating Hours</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Manage facility schedules and maintenance periods
+                    Manage facility schedules
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -158,8 +147,7 @@ export default function AdminPage() {
                 <CardHeader>
                   <CardTitle>Equipment Status</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Track overdue returns, damaged equipment, and lost items by
-                    students
+                    Track overdue returns, damaged equipment, and lost items
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -184,6 +172,6 @@ export default function AdminPage() {
           </Tabs>
         </main>
       </div>
-    </AuthGuard>
+    </>
   );
 }
