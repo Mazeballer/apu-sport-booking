@@ -264,9 +264,19 @@ export function IssueReturnFlow() {
 
   return (
     <Tabs defaultValue="issue" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="issue">Issue Equipment</TabsTrigger>
-        <TabsTrigger value="return">Return Equipment</TabsTrigger>
+      <TabsList className="grid w-full grid-cols-2 bg-transparent gap-2 p-0">
+        <TabsTrigger
+          value="issue"
+          className="data-[state=active]:border-3 data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-semibold rounded-xl data-[state=inactive]:border-0 data-[state=inactive]:bg-muted/50"
+        >
+          Issue Equipment
+        </TabsTrigger>
+        <TabsTrigger
+          value="return"
+          className="data-[state=active]:border-3 data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-semibold rounded-xl data-[state=inactive]:border-0 data-[state=inactive]:bg-muted/50"
+        >
+          Return Equipment
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="issue" className="space-y-6 pt-6">
@@ -279,6 +289,7 @@ export function IssueReturnFlow() {
               placeholder="student@mail.apu.edu.my"
               value={issueEmail}
               onChange={(e) => setIssueEmail(e.target.value)}
+              className="border-3 border-primary/20 focus:border-primary shadow-sm"
             />
           </div>
 
@@ -289,7 +300,7 @@ export function IssueReturnFlow() {
                 value={currentEquipmentId}
                 onValueChange={setCurrentEquipmentId}
               >
-                <SelectTrigger className="flex-1">
+                <SelectTrigger className="flex-1 border-3 border-primary/20 focus:border-primary shadow-sm">
                   <SelectValue placeholder="Select equipment" />
                 </SelectTrigger>
                 <SelectContent>
@@ -315,7 +326,7 @@ export function IssueReturnFlow() {
                 onChange={(e) =>
                   setCurrentQuantity(Number.parseInt(e.target.value) || 1)
                 }
-                className="w-20"
+                className="w-20 border-3 border-primary/20 focus:border-primary shadow-sm"
                 placeholder="Qty"
               />
               <Button
@@ -355,7 +366,7 @@ export function IssueReturnFlow() {
                           Number.parseInt(e.target.value) || 1
                         )
                       }
-                      className="w-16 h-8"
+                      className="w-16 h-8 border-3 border-primary/20 focus:border-primary shadow-sm"
                     />
                     <Button
                       type="button"
@@ -533,6 +544,7 @@ export function IssueReturnFlow() {
                     setQuantityReturning(Number.parseInt(e.target.value) || 1)
                   }
                   placeholder="Enter quantity"
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum:{' '}
@@ -652,7 +664,7 @@ export function IssueReturnFlow() {
                     placeholder="Search by student email..."
                     value={emailSearchQuery}
                     onChange={(e) => setEmailSearchQuery(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 border-3 border-primary/20 focus:border-primary shadow-sm"
                   />
                 </div>
               </div>

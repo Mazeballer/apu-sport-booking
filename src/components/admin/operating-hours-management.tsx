@@ -53,6 +53,7 @@ export function OperatingHoursManagement() {
                   onChange={(e) => {
                     facility.operatingHours.start = e.target.value;
                   }}
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 />
               </div>
 
@@ -65,6 +66,7 @@ export function OperatingHoursManagement() {
                   onChange={(e) => {
                     facility.operatingHours.end = e.target.value;
                   }}
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 />
               </div>
             </div>

@@ -92,8 +92,8 @@ export function AnalyticsDashboard() {
   ];
 
   const EQUIPMENT_COLORS = {
-    inUse: '#3b82f6', // Blue
-    available: '#e5e7eb', // Light gray
+    inUse: '#2563eb', // Darker blue for better visibility
+    available: '#6b7280', // Changed from #d1d5db to #6b7280 for much better visibility in light mode
   };
 
   return (
@@ -278,11 +278,14 @@ export function AnalyticsDashboard() {
                 data={equipmentUsageData}
                 margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 13, fill: '#374151' }}
+                />
+                <YAxis tick={{ fontSize: 13, fill: '#374151' }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: '14px', fontWeight: 600 }} />
                 <Bar
                   dataKey="inUse"
                   stackId="a"

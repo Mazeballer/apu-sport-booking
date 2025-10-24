@@ -180,18 +180,23 @@ export function BookingsCalendar() {
                       <TableCell>{booking.userEmail}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                          <CalendarIcon className="h-4 w-4 text-primary" />
                           {new Date(booking.date).toLocaleDateString()}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <ClockIcon className="h-4 w-4 text-muted-foreground" />
+                          <ClockIcon className="h-4 w-4 text-primary" />
                           {booking.startTime}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{booking.duration}h</Badge>
+                        <Badge
+                          variant="secondary"
+                          className="bg-primary/10 text-primary border-primary/20"
+                        >
+                          {booking.duration}h
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         {booking.equipment.length > 0 ? (
@@ -250,7 +255,12 @@ export function BookingsCalendar() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Duration</span>
-                        <Badge variant="secondary">{booking.duration}h</Badge>
+                        <Badge
+                          variant="secondary"
+                          className="bg-primary/10 text-primary border-primary/20"
+                        >
+                          {booking.duration}h
+                        </Badge>
                       </div>
                       {booking.equipment.length > 0 && (
                         <div className="flex justify-between">

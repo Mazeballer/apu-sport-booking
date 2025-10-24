@@ -520,15 +520,33 @@ export function FacilitiesManagement() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Capacity</TableHead>
-              <TableHead>Courts</TableHead>
-              <TableHead>Equipment</TableHead>
-              <TableHead>Hours</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Name
+              </TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Type
+              </TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Location
+              </TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Capacity
+              </TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Courts
+              </TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Equipment
+              </TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Hours
+              </TableHead>
+              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                Status
+              </TableHead>
+              <TableHead className="text-right font-bold text-gray-900 dark:text-gray-100">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -819,9 +837,12 @@ function FacilityForm({
 
   return (
     <div className="space-y-6 py-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">
+      <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-2 pr-3 border-r-2 border-gray-200 dark:border-gray-700">
+          <Label
+            htmlFor="name"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
             Facility Name <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -829,9 +850,9 @@ function FacilityForm({
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="Main Basketball Court"
-            className={
+            className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
               !formData.name.trim() && errors.name ? 'border-destructive' : ''
-            }
+            }`}
           />
           {!formData.name.trim() && errors.name && (
             <p className="text-xs text-destructive">
@@ -840,8 +861,13 @@ function FacilityForm({
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="type">Sport Type</Label>
+        <div className="space-y-2 pl-3">
+          <Label
+            htmlFor="type"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Sport Type
+          </Label>
           <Select
             value={
               isCustomSport
@@ -852,7 +878,10 @@ function FacilityForm({
             }
             onValueChange={handleSportTypeChange}
           >
-            <SelectTrigger id="type">
+            <SelectTrigger
+              id="type"
+              className="border-3 border-primary/20 focus:border-primary shadow-sm"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -870,16 +899,19 @@ function FacilityForm({
               placeholder="Enter custom sport type"
               value={customSportType}
               onChange={(e) => handleCustomSportTypeChange(e.target.value)}
-              className="mt-2"
+              className="mt-2 border-2"
             />
           )}
         </div>
       </div>
 
-      <div className="space-y-3 rounded-lg border p-4 bg-muted/50">
+      <div className="space-y-3 rounded-lg border-2 p-4 bg-muted/50 border-3 border-primary/20 focus:border-primary shadow-sm">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label htmlFor="multiSport" className="text-base">
+            <Label
+              htmlFor="multiSport"
+              className="text-base font-semibold text-gray-900 dark:text-gray-100"
+            >
               Multi-Sport Courts
             </Label>
             <p className="text-sm text-muted-foreground">
@@ -895,7 +927,7 @@ function FacilityForm({
 
         {formData.isMultiSport && (
           <div className="space-y-2 pt-2">
-            <Label className="text-sm">
+            <Label className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               Supported Sports (select all that apply)
             </Label>
             <div className="grid grid-cols-2 gap-2">
@@ -926,9 +958,12 @@ function FacilityForm({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="location">
+      <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-2 pr-3 border-r-2 border-gray-200 dark:border-gray-700">
+          <Label
+            htmlFor="location"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
             Location <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -938,26 +973,34 @@ function FacilityForm({
               setFormData({ ...formData, location: e.target.value })
             }
             placeholder="Sports Complex A"
-            className={
+            className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
               !formData.location.trim() && errors.location
                 ? 'border-destructive'
                 : ''
-            }
+            }`}
           />
           {!formData.location.trim() && errors.location && (
             <p className="text-xs text-destructive">Location is required</p>
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="locationType">Location Type</Label>
+        <div className="space-y-2 pl-3">
+          <Label
+            htmlFor="locationType"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Location Type
+          </Label>
           <Select
             value={formData.locationType}
             onValueChange={(value) =>
               setFormData({ ...formData, locationType: value })
             }
           >
-            <SelectTrigger id="locationType">
+            <SelectTrigger
+              id="locationType"
+              className="border-3 border-primary/20 focus:border-primary shadow-sm"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -969,7 +1012,7 @@ function FacilityForm({
       </div>
 
       <div className="space-y-2">
-        <Label>
+        <Label className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">
           Facility Image <span className="text-destructive">*</span>
         </Label>
         <ImageUpload value={imageFile} onChange={setImageFile} />
@@ -979,7 +1022,7 @@ function FacilityForm({
       </div>
 
       <div className="space-y-2">
-        <Label>
+        <Label className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">
           Courts Layout Image <span className="text-destructive">*</span>
         </Label>
         <ImageUpload value={layoutImageFile} onChange={setLayoutImageFile} />
@@ -991,7 +1034,10 @@ function FacilityForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="description">
+        <Label
+          htmlFor="description"
+          className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+        >
           Description <span className="text-destructive">*</span>
         </Label>
         <Textarea
@@ -1002,11 +1048,11 @@ function FacilityForm({
           }
           placeholder="Professional indoor basketball court with wooden flooring..."
           rows={3}
-          className={
+          className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
             !formData.description.trim() && errors.description
               ? 'border-destructive'
               : ''
-          }
+          }`}
         />
         {!formData.description.trim() && errors.description && (
           <p className="text-xs text-destructive">Description is required</p>
@@ -1015,7 +1061,7 @@ function FacilityForm({
 
       <div className="space-y-4">
         <div>
-          <Label className="text-base font-semibold">
+          <Label className="text-base font-semibold text-gray-900 dark:text-gray-100">
             Facility Rules <span className="text-destructive">*</span>
           </Label>
           <p className="text-sm text-muted-foreground">
@@ -1023,7 +1069,7 @@ function FacilityForm({
           </p>
         </div>
 
-        <div className="space-y-3 rounded-lg border p-4 bg-muted/50">
+        <div className="space-y-3 rounded-lg border-2 p-4 bg-muted/50">
           <div className="flex gap-2">
             <Input
               placeholder="Enter a facility rule (e.g., Proper sports attire required)"
@@ -1035,7 +1081,7 @@ function FacilityForm({
                   addRule();
                 }
               }}
-              className="flex-1"
+              className="flex-1 border-3 border-primary/20 focus:border-primary shadow-sm"
             />
             <Button
               type="button"
@@ -1050,14 +1096,14 @@ function FacilityForm({
 
           {formData.rules && formData.rules.length > 0 && (
             <div className="space-y-2 pt-2">
-              <Label className="text-sm">
+              <Label className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Current Rules ({formData.rules.length})
               </Label>
               <div className="space-y-2">
                 {formData.rules.map((rule: string, index: number) => (
                   <div
                     key={index}
-                    className="flex items-start gap-2 p-3 rounded-lg border bg-background"
+                    className="flex items-start gap-2 p-3 rounded-lg border-2 bg-background"
                   >
                     <div className="flex-1">
                       <p className="text-sm">{rule}</p>
@@ -1093,9 +1139,14 @@ function FacilityForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="capacity">Capacity (people)</Label>
+      <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-2 pr-3 border-r-2 border-gray-200 dark:border-gray-700">
+          <Label
+            htmlFor="capacity"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Capacity (people)
+          </Label>
           <Input
             id="capacity"
             type="number"
@@ -1107,11 +1158,17 @@ function FacilityForm({
               })
             }
             min={1}
+            className="border-3 border-primary/20 focus:border-primary shadow-sm"
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="numberOfCourts">Number of Courts</Label>
+        <div className="space-y-2 pl-3">
+          <Label
+            htmlFor="numberOfCourts"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Number of Courts
+          </Label>
           <Input
             id="numberOfCourts"
             type="number"
@@ -1124,17 +1181,26 @@ function FacilityForm({
             }
             min={1}
             max={20}
+            className="border-3 border-primary/20 focus:border-primary shadow-sm"
           />
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="status">Status</Label>
+        <Label
+          htmlFor="status"
+          className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+        >
+          Status
+        </Label>
         <Select
           value={formData.status}
           onValueChange={(value) => setFormData({ ...formData, status: value })}
         >
-          <SelectTrigger id="status">
+          <SelectTrigger
+            id="status"
+            className="border-3 border-primary/20 focus:border-primary shadow-sm"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1150,7 +1216,7 @@ function FacilityForm({
 
       <div className="space-y-4">
         <div>
-          <Label className="text-base font-semibold">
+          <Label className="text-base font-semibold text-gray-900 dark:text-gray-100">
             Equipment Available to Borrow
           </Label>
           <p className="text-sm text-muted-foreground">
@@ -1159,15 +1225,23 @@ function FacilityForm({
           </p>
         </div>
 
-        <div className="space-y-3 rounded-lg border p-4 bg-muted/50">
+        <div className="space-y-3 rounded-lg border-2 p-4 bg-muted/50">
           <div className="flex flex-col gap-4">
             <div className="space-y-2">
-              <Label htmlFor="equipmentSelect">Select Equipment</Label>
+              <Label
+                htmlFor="equipmentSelect"
+                className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+              >
+                Select Equipment
+              </Label>
               <Select
                 value={selectedEquipmentId}
                 onValueChange={setSelectedEquipmentId}
               >
-                <SelectTrigger id="equipmentSelect" className="w-full">
+                <SelectTrigger
+                  id="equipmentSelect"
+                  className="w-full border-3 border-primary/20 focus:border-primary shadow-sm"
+                >
                   <SelectValue placeholder="Choose from inventory" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1194,7 +1268,12 @@ function FacilityForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="equipmentQuantity">Quantity at Facility</Label>
+              <Label
+                htmlFor="equipmentQuantity"
+                className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+              >
+                Quantity at Facility
+              </Label>
               <Input
                 id="equipmentQuantity"
                 type="number"
@@ -1203,7 +1282,7 @@ function FacilityForm({
                   setEquipmentQuantity(Number.parseInt(e.target.value) || 1)
                 }
                 min={1}
-                className="w-full"
+                className="w-full border-3 border-primary/20 focus:border-primary shadow-sm"
               />
             </div>
           </div>
@@ -1223,7 +1302,7 @@ function FacilityForm({
         {formData.availableEquipment &&
           formData.availableEquipment.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm">
+              <Label className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Added Equipment ({formData.availableEquipment.length})
               </Label>
               <div className="space-y-2">
@@ -1234,7 +1313,7 @@ function FacilityForm({
                   return (
                     <div
                       key={eq.equipmentId}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-background"
+                      className="flex items-center justify-between p-3 rounded-lg border-2 bg-background"
                     >
                       <div className="flex-1">
                         <p className="font-medium">
@@ -1270,9 +1349,14 @@ function FacilityForm({
 
       <Separator />
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="operatingStart">Opening Time</Label>
+      <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-2 pr-3 border-r-2 border-gray-200 dark:border-gray-700">
+          <Label
+            htmlFor="operatingStart"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Opening Time
+          </Label>
           <Input
             id="operatingStart"
             type="time"
@@ -1280,11 +1364,17 @@ function FacilityForm({
             onChange={(e) =>
               setFormData({ ...formData, operatingStart: e.target.value })
             }
+            className="border-3 border-primary/20 focus:border-primary shadow-sm"
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="operatingEnd">Closing Time</Label>
+        <div className="space-y-2 pl-3">
+          <Label
+            htmlFor="operatingEnd"
+            className="text-[15px] font-semibold text-gray-900 dark:text-gray-100"
+          >
+            Closing Time
+          </Label>
           <Input
             id="operatingEnd"
             type="time"
@@ -1292,6 +1382,7 @@ function FacilityForm({
             onChange={(e) =>
               setFormData({ ...formData, operatingEnd: e.target.value })
             }
+            className="border-3 border-primary/20 focus:border-primary shadow-sm"
           />
         </div>
       </div>

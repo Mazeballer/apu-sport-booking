@@ -1,46 +1,92 @@
-"use client"
+'use client';
 
-import { AuthGuard } from "@/components/auth-guard"
-import { Navbar } from "@/components/navbar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { bookings, facilities } from "@/lib/data"
-import { getUserEmail } from "@/lib/auth"
-import { CalendarIcon, ClockIcon, MapPinIcon, EditIcon, XIcon, BellIcon } from "lucide-react"
-import { useState } from "react"
-import { RescheduleDialog } from "@/components/reschedule-dialog"
-import { CancelDialog } from "@/components/cancel-dialog"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AuthGuard } from '@/components/auth-guard';
+import { Navbar } from '@/components/navbar';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { bookings, facilities } from '@/lib/data';
+import { getUserEmail } from '@/lib/auth';
+import {
+  CalendarIcon,
+  ClockIcon,
+  MapPinIcon,
+  EditIcon,
+  XIcon,
+  BellIcon,
+} from 'lucide-react';
+import { useState } from 'react';
+import { RescheduleDialog } from '@/components/reschedule-dialog';
+import { CancelDialog } from '@/components/cancel-dialog';
+import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+const getEquipmentColor = (equipment: string) => {
+  const lowerEquip = equipment.toLowerCase();
+
+  if (lowerEquip.includes('basketball') || lowerEquip.includes('scoreboard')) {
+    return 'bg-orange-500 text-white hover:bg-orange-600';
+  } else if (
+    lowerEquip.includes('badminton') ||
+    lowerEquip.includes('shuttlecock')
+  ) {
+    return 'bg-green-600 text-white hover:bg-green-700';
+  } else if (
+    lowerEquip.includes('tennis') ||
+    lowerEquip.includes('tennis ball')
+  ) {
+    return 'bg-lime-600 text-white hover:bg-lime-700';
+  } else if (lowerEquip.includes('football') || lowerEquip.includes('cone')) {
+    return 'bg-blue-600 text-white hover:bg-blue-700';
+  } else if (
+    lowerEquip.includes('swimming') ||
+    lowerEquip.includes('pool') ||
+    lowerEquip.includes('lane')
+  ) {
+    return 'bg-cyan-600 text-white hover:bg-cyan-700';
+  }
+
+  // Default color for other equipment
+  return 'bg-gray-600 text-white hover:bg-gray-700';
+};
 
 export default function BookingsPage() {
-  const userEmail = getUserEmail()
-  const userBookings = bookings.filter((b) => b.userEmail === userEmail && b.status === "confirmed")
-  const [selectedBooking, setSelectedBooking] = useState<string | null>(null)
-  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false)
-  const [isCancelOpen, setIsCancelOpen] = useState(false)
-  const [pushEnabled, setPushEnabled] = useState(false)
+  const userEmail = getUserEmail();
+  const userBookings = bookings.filter(
+    (b) => b.userEmail === userEmail && b.status === 'confirmed'
+  );
+  const [selectedBooking, setSelectedBooking] = useState<string | null>(null);
+  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
+  const [isCancelOpen, setIsCancelOpen] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
 
   const handleReschedule = (bookingId: string) => {
-    setSelectedBooking(bookingId)
-    setIsRescheduleOpen(true)
-  }
+    setSelectedBooking(bookingId);
+    setIsRescheduleOpen(true);
+  };
 
   const handleCancel = (bookingId: string) => {
-    setSelectedBooking(bookingId)
-    setIsCancelOpen(true)
-  }
+    setSelectedBooking(bookingId);
+    setIsCancelOpen(true);
+  };
 
   const canCancelBooking = (booking: (typeof bookings)[0]) => {
-    const bookingDateTime = new Date(`${booking.date}T${booking.startTime}`)
-    const now = new Date()
-    const minutesUntilBooking = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60)
-    return minutesUntilBooking > 30 // 30 minutes cancellation window
-  }
+    const bookingDateTime = new Date(`${booking.date}T${booking.startTime}`);
+    const now = new Date();
+    const minutesUntilBooking =
+      (bookingDateTime.getTime() - now.getTime()) / (1000 * 60);
+    return minutesUntilBooking > 30; // 30 minutes cancellation window
+  };
 
   return (
     <AuthGuard>
@@ -50,7 +96,9 @@ export default function BookingsPage() {
         <main className="container mx-auto px-4 py-8">
           <div className="mb-8">
             <h1 className="text-4xl font-bold mb-2">My Bookings</h1>
-            <p className="text-muted-foreground text-lg">View and manage your facility bookings</p>
+            <p className="text-muted-foreground text-lg">
+              View and manage your facility bookings
+            </p>
           </div>
 
           {/* Push Notifications Toggle */}
@@ -62,13 +110,22 @@ export default function BookingsPage() {
                     <BellIcon className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <Label htmlFor="push-notifications" className="text-base font-semibold cursor-pointer">
+                    <Label
+                      htmlFor="push-notifications"
+                      className="text-base font-semibold cursor-pointer"
+                    >
                       Push Reminders
                     </Label>
-                    <p className="text-sm text-muted-foreground">Get a reminder 2 hours before your booking</p>
+                    <p className="text-sm text-muted-foreground">
+                      Get a reminder 2 hours before your booking
+                    </p>
                   </div>
                 </div>
-                <Switch id="push-notifications" checked={pushEnabled} onCheckedChange={setPushEnabled} />
+                <Switch
+                  id="push-notifications"
+                  checked={pushEnabled}
+                  onCheckedChange={setPushEnabled}
+                />
               </div>
             </CardContent>
           </Card>
@@ -80,7 +137,9 @@ export default function BookingsPage() {
                   <CalendarIcon className="w-12 h-12 text-muted-foreground" />
                 </div>
                 <h3 className="text-xl font-semibold mb-2">No bookings yet</h3>
-                <p className="text-muted-foreground mb-6">Start by browsing available facilities</p>
+                <p className="text-muted-foreground mb-6">
+                  Start by browsing available facilities
+                </p>
                 <Button asChild>
                   <a href="/">Browse Facilities</a>
                 </Button>
@@ -107,42 +166,59 @@ export default function BookingsPage() {
                     </TableHeader>
                     <TableBody>
                       {userBookings.map((booking) => {
-                        const facility = facilities.find((f) => f.id === booking.facilityId)
-                        const canCancel = canCancelBooking(booking)
+                        const facility = facilities.find(
+                          (f) => f.id === booking.facilityId
+                        );
+                        const canCancel = canCancelBooking(booking);
 
                         return (
                           <TableRow key={booking.id}>
                             <TableCell>
                               <div>
                                 <p className="font-medium">{facility?.name}</p>
-                                <p className="text-sm text-muted-foreground">{facility?.location}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {facility?.location}
+                                </p>
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                                <CalendarIcon className="h-4 w-4 text-primary" />
                                 {new Date(booking.date).toLocaleDateString()}
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <ClockIcon className="h-4 w-4 text-muted-foreground" />
+                                <ClockIcon className="h-4 w-4 text-primary" />
                                 {booking.startTime}
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="secondary">{booking.duration}h</Badge>
+                              <Badge
+                                variant="secondary"
+                                className="bg-primary/10 text-primary border-primary/20 font-semibold"
+                              >
+                                {booking.duration}h
+                              </Badge>
                             </TableCell>
                             <TableCell>
                               {booking.equipment.length > 0 ? (
-                                <div className="text-sm">{booking.equipment.join(", ")}</div>
+                                <div className="text-sm">
+                                  {booking.equipment.join(', ')}
+                                </div>
                               ) : (
-                                <span className="text-muted-foreground text-sm">None</span>
+                                <span className="text-muted-foreground text-sm">
+                                  None
+                                </span>
                               )}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <Button variant="outline" size="sm" onClick={() => handleReschedule(booking.id)}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleReschedule(booking.id)}
+                                >
                                   <EditIcon className="h-4 w-4 mr-1" />
                                   Reschedule
                                 </Button>
@@ -170,7 +246,7 @@ export default function BookingsPage() {
                               </div>
                             </TableCell>
                           </TableRow>
-                        )
+                        );
                       })}
                     </TableBody>
                   </Table>
@@ -180,15 +256,19 @@ export default function BookingsPage() {
               {/* Mobile Card View */}
               <div className="md:hidden space-y-4">
                 {userBookings.map((booking) => {
-                  const facility = facilities.find((f) => f.id === booking.facilityId)
-                  const canCancel = canCancelBooking(booking)
+                  const facility = facilities.find(
+                    (f) => f.id === booking.facilityId
+                  );
+                  const canCancel = canCancelBooking(booking);
 
                   return (
                     <Card key={booking.id} className="rounded-2xl shadow-md">
                       <CardContent className="pt-6">
                         <div className="space-y-4">
                           <div>
-                            <h3 className="font-bold text-lg mb-1">{facility?.name}</h3>
+                            <h3 className="font-bold text-lg mb-1">
+                              {facility?.name}
+                            </h3>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <MapPinIcon className="h-4 w-4" />
                               {facility?.location}
@@ -213,13 +293,24 @@ export default function BookingsPage() {
                               </div>
                             </div>
                             <div>
-                              <p className="text-muted-foreground mb-1">Duration</p>
-                              <Badge variant="secondary">{booking.duration} hours</Badge>
+                              <p className="text-muted-foreground mb-1">
+                                Duration
+                              </p>
+                              <Badge
+                                variant="secondary"
+                                className="bg-primary/10 text-primary border-primary/20 font-semibold"
+                              >
+                                {booking.duration} hours
+                              </Badge>
                             </div>
                             <div>
-                              <p className="text-muted-foreground mb-1">Equipment</p>
+                              <p className="text-muted-foreground mb-1">
+                                Equipment
+                              </p>
                               <p className="font-medium">
-                                {booking.equipment.length > 0 ? booking.equipment.length : "None"}
+                                {booking.equipment.length > 0
+                                  ? booking.equipment.length
+                                  : 'None'}
                               </p>
                             </div>
                           </div>
@@ -228,10 +319,17 @@ export default function BookingsPage() {
                             <>
                               <Separator />
                               <div>
-                                <p className="text-sm text-muted-foreground mb-2">Equipment Items</p>
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  Equipment Items
+                                </p>
                                 <div className="flex flex-wrap gap-2">
                                   {booking.equipment.map((eq, idx) => (
-                                    <Badge key={idx} variant="outline">
+                                    <Badge
+                                      key={idx}
+                                      className={`${getEquipmentColor(
+                                        eq
+                                      )} border-0 font-medium`}
+                                    >
                                       {eq}
                                     </Badge>
                                   ))}
@@ -262,26 +360,36 @@ export default function BookingsPage() {
                               </Button>
                             ) : (
                               <div className="flex-1">
-                                <Button variant="outline" className="w-full bg-transparent" disabled>
+                                <Button
+                                  variant="outline"
+                                  className="w-full bg-transparent"
+                                  disabled
+                                >
                                   <XIcon className="h-4 w-4 mr-2" />
                                   Cancel
                                 </Button>
-                                <p className="text-xs text-muted-foreground mt-1 text-center">Cancellations closed</p>
+                                <p className="text-xs text-muted-foreground mt-1 text-center">
+                                  Cancellations closed
+                                </p>
                               </div>
                             )}
                           </div>
 
                           {!canCancel && (
-                            <Alert variant="destructive" className="bg-destructive/10 border-destructive/20">
+                            <Alert
+                              variant="destructive"
+                              className="bg-destructive/10 border-destructive/20"
+                            >
                               <AlertDescription className="text-xs">
-                                Cancellations are closed within 30 minutes of your booking start time.
+                                Cancellations are closed within 30 minutes of
+                                your booking start time.
                               </AlertDescription>
                             </Alert>
                           )}
                         </div>
                       </CardContent>
                     </Card>
-                  )
+                  );
                 })}
               </div>
             </>
@@ -290,11 +398,19 @@ export default function BookingsPage() {
 
         {selectedBooking && (
           <>
-            <RescheduleDialog bookingId={selectedBooking} open={isRescheduleOpen} onOpenChange={setIsRescheduleOpen} />
-            <CancelDialog bookingId={selectedBooking} open={isCancelOpen} onOpenChange={setIsCancelOpen} />
+            <RescheduleDialog
+              bookingId={selectedBooking}
+              open={isRescheduleOpen}
+              onOpenChange={setIsRescheduleOpen}
+            />
+            <CancelDialog
+              bookingId={selectedBooking}
+              open={isCancelOpen}
+              onOpenChange={setIsCancelOpen}
+            />
           </>
         )}
       </div>
     </AuthGuard>
-  )
+  );
 }

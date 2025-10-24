@@ -514,6 +514,159 @@ export const bookings: Booking[] = [
 // Generate some equipment requests
 export const equipmentRequests: EquipmentRequest[] = [
   {
+    id: 'er_overdue1',
+    userId: 'user2',
+    userEmail: 'john.doe@mail.apu.edu.my',
+    equipmentId: 'eq1',
+    equipmentName: 'Basketball',
+    facilityId: '1',
+    facilityName: 'Basketball Court A',
+    requestDate: new Date(today.getTime() - 10 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0],
+    status: 'issued',
+    notes: 'Borrowed for practice',
+    createdAt: new Date(
+      today.getTime() - 10 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+    quantityBorrowed: 2,
+    quantityReturned: 0,
+  },
+  {
+    id: 'er_overdue2',
+    userId: 'user3',
+    userEmail: 'jane.smith@mail.apu.edu.my',
+    equipmentId: 'eq5',
+    equipmentName: 'Tennis Racket',
+    facilityId: '3',
+    facilityName: 'Tennis Courts',
+    requestDate: new Date(today.getTime() - 12 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0],
+    status: 'issued',
+    notes: 'Weekend practice',
+    createdAt: new Date(
+      today.getTime() - 12 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+    quantityBorrowed: 1,
+    quantityReturned: 0,
+  },
+  {
+    id: 'er_overdue3',
+    userId: 'user4',
+    userEmail: 'alex.tan@mail.apu.edu.my',
+    equipmentId: 'eq7',
+    equipmentName: 'Football',
+    facilityId: '4',
+    facilityName: 'Football Field',
+    requestDate: new Date(today.getTime() - 15 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0],
+    status: 'issued',
+    notes: 'Team training',
+    createdAt: new Date(
+      today.getTime() - 15 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+    quantityBorrowed: 3,
+    quantityReturned: 0,
+  },
+  {
+    id: 'er_damaged1',
+    userId: 'user5',
+    userEmail: 'sarah.lee@mail.apu.edu.my',
+    equipmentId: 'eq3',
+    equipmentName: 'Badminton Racket',
+    facilityId: '2',
+    facilityName: 'Badminton Hall',
+    requestDate: new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0],
+    status: 'returned',
+    notes: 'Returned with damage',
+    createdAt: new Date(
+      today.getTime() - 8 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+    quantityBorrowed: 2,
+    quantityReturned: 2,
+    returnCondition: 'damaged',
+    damageNotes: 'String broken on both rackets, frame slightly bent on one',
+    returnedAt: new Date(
+      today.getTime() - 2 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'er_damaged2',
+    userId: 'user6',
+    userEmail: 'mike.wong@mail.apu.edu.my',
+    equipmentId: 'eq1',
+    equipmentName: 'Basketball',
+    facilityId: '1',
+    facilityName: 'Basketball Court A',
+    requestDate: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0],
+    status: 'returned',
+    notes: 'Damaged during game',
+    createdAt: new Date(
+      today.getTime() - 9 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+    quantityBorrowed: 1,
+    quantityReturned: 1,
+    returnCondition: 'damaged',
+    damageNotes: 'Ball deflated and valve damaged, cannot hold air',
+    returnedAt: new Date(
+      today.getTime() - 3 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'er_lost1',
+    userId: 'user7',
+    userEmail: 'david.lim@mail.apu.edu.my',
+    equipmentId: 'eq6',
+    equipmentName: 'Tennis Balls (can)',
+    facilityId: '3',
+    facilityName: 'Tennis Courts',
+    requestDate: new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0],
+    status: 'returned',
+    notes: 'Lost during outdoor session',
+    createdAt: new Date(
+      today.getTime() - 16 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+    quantityBorrowed: 2,
+    quantityReturned: 2,
+    returnCondition: 'lost',
+    damageNotes: 'Balls went over fence and could not be retrieved',
+    returnedAt: new Date(
+      today.getTime() - 6 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'er_lost2',
+    userId: 'user8',
+    userEmail: 'emily.chan@mail.apu.edu.my',
+    equipmentId: 'eq2',
+    equipmentName: 'Scoreboard Remote',
+    facilityId: '1',
+    facilityName: 'Basketball Court A',
+    requestDate: new Date(today.getTime() - 20 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0],
+    status: 'returned',
+    notes: 'Misplaced after event',
+    createdAt: new Date(
+      today.getTime() - 22 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+    quantityBorrowed: 1,
+    quantityReturned: 1,
+    returnCondition: 'lost',
+    damageNotes: 'Remote was misplaced after tournament, unable to locate',
+    returnedAt: new Date(
+      today.getTime() - 10 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
     id: 'er1',
     userId: 'user1',
     userEmail: 'student@mail.apu.edu.my',
@@ -784,6 +937,56 @@ export const users: User[] = [
     role: 'staff',
     createdAt: new Date(
       today.getTime() - 120 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'u7',
+    email: 'alex.tan@mail.apu.edu.my',
+    password: 'password123',
+    name: 'Alex Tan',
+    role: 'student',
+    createdAt: new Date(
+      today.getTime() - 14 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'u8',
+    email: 'sarah.lee@mail.apu.edu.my',
+    password: 'password123',
+    name: 'Sarah Lee',
+    role: 'student',
+    createdAt: new Date(
+      today.getTime() - 16 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'u9',
+    email: 'mike.wong@mail.apu.edu.my',
+    password: 'password123',
+    name: 'Mike Wong',
+    role: 'student',
+    createdAt: new Date(
+      today.getTime() - 18 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'u10',
+    email: 'david.lim@mail.apu.edu.my',
+    password: 'password123',
+    name: 'David Lim',
+    role: 'student',
+    createdAt: new Date(
+      today.getTime() - 20 * 24 * 60 * 60 * 1000
+    ).toISOString(),
+  },
+  {
+    id: 'u11',
+    email: 'emily.chan@mail.apu.edu.my',
+    password: 'password123',
+    name: 'Emily Chan',
+    role: 'student',
+    createdAt: new Date(
+      today.getTime() - 22 * 24 * 60 * 60 * 1000
     ).toISOString(),
   },
 ];

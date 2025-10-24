@@ -500,7 +500,9 @@ function EquipmentForm({
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Basketball"
-          className={validationErrors.name ? 'border-destructive' : ''}
+          className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
+            validationErrors.name ? 'border-destructive' : ''
+          }`}
         />
         {validationErrors.name && (
           <p className="text-sm text-destructive">{validationErrors.name}</p>
@@ -519,7 +521,9 @@ function EquipmentForm({
         >
           <SelectTrigger
             id="eq-facility"
-            className={validationErrors.facilityId ? 'border-destructive' : ''}
+            className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
+              validationErrors.facilityId ? 'border-destructive' : ''
+            }`}
           >
             <SelectValue placeholder="Select facility" />
           </SelectTrigger>
@@ -539,8 +543,11 @@ function EquipmentForm({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="eq-total">
+        <div className="space-y-2 pr-3 border-r-2 border-border">
+          <Label
+            htmlFor="eq-total"
+            className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
+          >
             Total Quantity <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -554,7 +561,9 @@ function EquipmentForm({
               })
             }
             min={1}
-            className={validationErrors.qtyTotal ? 'border-destructive' : ''}
+            className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
+              validationErrors.qtyTotal ? 'border-destructive' : ''
+            }`}
           />
           {validationErrors.qtyTotal && (
             <p className="text-sm text-destructive">
@@ -563,8 +572,11 @@ function EquipmentForm({
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="eq-available">
+        <div className="space-y-2 pl-3">
+          <Label
+            htmlFor="eq-available"
+            className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
+          >
             Available Quantity <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -579,9 +591,9 @@ function EquipmentForm({
             }
             min={0}
             max={formData.qtyTotal}
-            className={
+            className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
               validationErrors.qtyAvailable ? 'border-destructive' : ''
-            }
+            }`}
           />
           {validationErrors.qtyAvailable && (
             <p className="text-sm text-destructive">

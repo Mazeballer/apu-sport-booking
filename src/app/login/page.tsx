@@ -119,6 +119,7 @@ function LoginInner() {
                 placeholder="student@mail.apu.edu.my"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 required
               />
             </div>
@@ -130,6 +131,7 @@ function LoginInner() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 required
               />
             </div>

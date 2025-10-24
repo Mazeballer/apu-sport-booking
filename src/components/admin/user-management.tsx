@@ -9,7 +9,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import {
   Table,
@@ -176,12 +175,12 @@ export function UserManagement() {
             placeholder="Search by email, name, or role..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-11"
+            className="pl-10 border-3 border-primary/20 focus:border-primary shadow-sm"
           />
         </div>
         <Button
           onClick={() => setShowAddForm(!showAddForm)}
-          className="gap-2 h-11 px-6 w-full sm:w-auto"
+          className="gap-2 w-full sm:w-auto"
         >
           <PlusIcon className="h-4 w-4" />
           Add New User
@@ -190,11 +189,18 @@ export function UserManagement() {
 
       {/* Add User Form */}
       {showAddForm && (
-        <div className="border rounded-lg p-6 space-y-4 bg-card shadow-sm">
-          <h3 className="text-lg font-semibold">Create New User</h3>
+        <div className="border rounded-lg p-6 space-y-4 bg-card">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            Create New User
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label
+                htmlFor="name"
+                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
+              >
+                Full Name
+              </Label>
               <Input
                 id="name"
                 placeholder="John Doe"
@@ -202,10 +208,16 @@ export function UserManagement() {
                 onChange={(e) =>
                   setNewUser({ ...newUser, name: e.target.value })
                 }
+                className="border-3 border-primary/20 focus:border-primary shadow-sm"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label
+                htmlFor="email"
+                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
+              >
+                Email
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -214,10 +226,16 @@ export function UserManagement() {
                 onChange={(e) =>
                   setNewUser({ ...newUser, email: e.target.value })
                 }
+                className="border-3 border-primary/20 focus:border-primary shadow-sm"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label
+                htmlFor="password"
+                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
+              >
+                Password
+              </Label>
               <Input
                 id="password"
                 type="password"
@@ -226,23 +244,54 @@ export function UserManagement() {
                 onChange={(e) =>
                   setNewUser({ ...newUser, password: e.target.value })
                 }
+                className="border-3 border-primary/20 focus:border-primary shadow-sm"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
+              <Label
+                htmlFor="role"
+                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
+              >
+                Role
+              </Label>
               <Select
                 value={newUser.role}
                 onValueChange={(value: any) =>
                   setNewUser({ ...newUser, role: value })
                 }
               >
-                <SelectTrigger id="role">
-                  <SelectValue />
+                <SelectTrigger
+                  id="role"
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
+                >
+                  <Badge
+                    variant={getRoleBadgeVariant(newUser.role)}
+                    className={`capitalize ${getRoleBadgeClassName(
+                      newUser.role
+                    )}`}
+                  >
+                    {newUser.role}
+                  </Badge>
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                <SelectContent className="border-2">
+                  <SelectItem value="student">
+                    <Badge
+                      variant="secondary"
+                      className="bg-green-200 text-green-950 border-green-300 capitalize"
+                    >
+                      Student
+                    </Badge>
+                  </SelectItem>
+                  <SelectItem value="staff">
+                    <Badge variant="default" className="capitalize">
+                      Staff
+                    </Badge>
+                  </SelectItem>
+                  <SelectItem value="admin">
+                    <Badge variant="destructive" className="capitalize">
+                      Admin
+                    </Badge>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -273,7 +322,7 @@ export function UserManagement() {
               variant="outline"
               size="sm"
               onClick={handleCancelRoleChanges}
-              className="flex-1 sm:flex-none border-amber-600 dark:border-amber-400 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-900/40 bg-transparent"
+              className="flex-1 sm:flex-none border-amber-600 dark:border-amber-400 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-950/40 bg-transparent"
             >
               Cancel
             </Button>
@@ -335,7 +384,7 @@ export function UserManagement() {
                           handleRoleSelect(user.id, value)
                         }
                       >
-                        <SelectTrigger className="w-full mt-1">
+                        <SelectTrigger className="w-full mt-1 border-3 border-primary/20 focus:border-primary shadow-sm">
                           <Badge
                             variant={getRoleBadgeVariant(displayRole)}
                             className={`capitalize ${getRoleBadgeClassName(
@@ -346,10 +395,25 @@ export function UserManagement() {
                             {hasPendingChange && ' *'}
                           </Badge>
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="student">Student</SelectItem>
-                          <SelectItem value="staff">Staff</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                        <SelectContent className="border-2">
+                          <SelectItem value="student">
+                            <Badge
+                              variant="secondary"
+                              className="bg-green-200 text-green-950 border-green-300 capitalize"
+                            >
+                              Student
+                            </Badge>
+                          </SelectItem>
+                          <SelectItem value="staff">
+                            <Badge variant="default" className="capitalize">
+                              Staff
+                            </Badge>
+                          </SelectItem>
+                          <SelectItem value="admin">
+                            <Badge variant="destructive" className="capitalize">
+                              Admin
+                            </Badge>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -370,15 +434,23 @@ export function UserManagement() {
           )}
         </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden shadow-sm">
+        <div className="border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold">Name</TableHead>
-                <TableHead className="font-semibold">Email</TableHead>
-                <TableHead className="font-semibold">Role</TableHead>
-                <TableHead className="font-semibold">Created</TableHead>
-                <TableHead className="text-right font-semibold">
+                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                  Name
+                </TableHead>
+                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                  Email
+                </TableHead>
+                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                  Role
+                </TableHead>
+                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
+                  Created
+                </TableHead>
+                <TableHead className="text-right font-bold text-gray-900 dark:text-gray-100">
                   Actions
                 </TableHead>
               </TableRow>
@@ -407,21 +479,23 @@ export function UserManagement() {
                           : ''
                       }`}
                     >
-                      <TableCell className="font-medium py-4">
+                      <TableCell className="font-semibold text-gray-900 dark:text-gray-100">
                         {user.name}
                       </TableCell>
-                      <TableCell className="py-4">{user.email}</TableCell>
-                      <TableCell className="py-4">
+                      <TableCell className="font-medium text-gray-800 dark:text-gray-200">
+                        {user.email}
+                      </TableCell>
+                      <TableCell>
                         <Select
                           value={displayRole}
                           onValueChange={(value: any) =>
                             handleRoleSelect(user.id, value)
                           }
                         >
-                          <SelectTrigger className="w-[140px] h-9">
+                          <SelectTrigger className="w-[140px] border-3 border-primary/20 focus:border-primary shadow-sm">
                             <Badge
                               variant={getRoleBadgeVariant(displayRole)}
-                              className={`capitalize font-medium ${getRoleBadgeClassName(
+                              className={`capitalize ${getRoleBadgeClassName(
                                 displayRole
                               )}`}
                             >
@@ -429,22 +503,40 @@ export function UserManagement() {
                               {hasPendingChange && ' *'}
                             </Badge>
                           </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="student">Student</SelectItem>
-                            <SelectItem value="staff">Staff</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
+                          <SelectContent className="border-2">
+                            <SelectItem value="student">
+                              <Badge
+                                variant="secondary"
+                                className="bg-green-200 text-green-950 border-green-300 capitalize"
+                              >
+                                Student
+                              </Badge>
+                            </SelectItem>
+                            <SelectItem value="staff">
+                              <Badge variant="default" className="capitalize">
+                                Staff
+                              </Badge>
+                            </SelectItem>
+                            <SelectItem value="admin">
+                              <Badge
+                                variant="destructive"
+                                className="capitalize"
+                              >
+                                Admin
+                              </Badge>
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="py-4 text-muted-foreground">
+                      <TableCell className="font-medium text-gray-800 dark:text-gray-200">
                         {new Date(user.createdAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="text-right py-4">
+                      <TableCell className="text-right">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setUserToDelete(user)}
-                          className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 h-9 w-9 p-0"
+                          className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
                         >
                           <TrashIcon className="h-4 w-4" />
                         </Button>
@@ -458,29 +550,40 @@ export function UserManagement() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3 text-sm bg-muted/30 rounded-lg p-4 border">
+      {/* Summary Stats */}
+      <div className="flex flex-wrap gap-3 text-sm bg-muted/50 rounded-lg p-4 border">
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Total Users:</span>
-          <span className="font-semibold">{users.length}</span>
+          <span className="text-gray-800 dark:text-gray-200 font-semibold">
+            Total Users:
+          </span>
+          <span className="font-bold text-gray-900 dark:text-gray-100">
+            {users.length}
+          </span>
         </div>
         <span className="text-muted-foreground">•</span>
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Admins:</span>
-          <span className="font-semibold text-red-600 dark:text-red-400">
+          <span className="text-gray-800 dark:text-gray-200 font-semibold">
+            Admins:
+          </span>
+          <span className="font-bold text-red-600 dark:text-red-400">
             {users.filter((u) => u.role === 'admin').length}
           </span>
         </div>
         <span className="text-muted-foreground">•</span>
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Staff:</span>
-          <span className="font-semibold text-blue-600 dark:text-blue-400">
+          <span className="text-gray-800 dark:text-gray-200 font-semibold">
+            Staff:
+          </span>
+          <span className="font-bold text-blue-600 dark:text-blue-400">
             {users.filter((u) => u.role === 'staff').length}
           </span>
         </div>
         <span className="text-muted-foreground">•</span>
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Students:</span>
-          <span className="font-semibold text-green-600 dark:text-green-400">
+          <span className="text-gray-800 dark:text-gray-200 font-semibold">
+            Students:
+          </span>
+          <span className="font-bold text-green-600 dark:text-green-400">
             {users.filter((u) => u.role === 'student').length}
           </span>
         </div>
