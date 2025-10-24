@@ -5,6 +5,7 @@ import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
+import RegisterSW from '@/components/register-sw';
 
 export const metadata: Metadata = {
   title: 'APU Sports Facility Booking',
@@ -17,28 +18,13 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: '#0A66C2',
-};
+export const viewport: Viewport = { themeColor: '#0A66C2' };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link
-          rel="manifest"
-          href="https://progressier.app/hdF448IAznzfMeprv2Nd/progressier.json"
-        />
-        <script
-          defer
-          src="https://progressier.app/hdF448IAznzfMeprv2Nd/script.js"
-        ></script>
-      </head>
-
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <ThemeProvider
           attribute="class"
@@ -48,6 +34,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster />
+          <RegisterSW />
         </ThemeProvider>
       </body>
     </html>
