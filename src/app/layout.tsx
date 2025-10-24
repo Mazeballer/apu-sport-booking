@@ -28,6 +28,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link
+          rel="manifest"
+          href="https://progressier.app/hdF448IAznzfMeprv2Nd/progressier.json"
+        />
+        <script
+          defer
+          src="https://progressier.app/hdF448IAznzfMeprv2Nd/script.js"
+        ></script>
+      </head>
+
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <ThemeProvider
           attribute="class"
