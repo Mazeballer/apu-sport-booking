@@ -23,7 +23,7 @@ import {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams?: { page?: string; query?: string };
+  searchParams?: Promise<{ page?: string; query?: string }>;
 }) {
   // 1) Server-side auth (session) + role gate (admin only)
   const supabase = await createServerSupabase();
@@ -42,9 +42,10 @@ export default async function AdminPage({
   }
 
   // 2) Preload users for the Users tab (SSR)
+  const params = await searchParams;
   const pageSize = 20;
-  const initialPage = Math.max(1, Number(searchParams?.page || 1));
-  const initialQuery = (searchParams?.query || '').trim();
+  const initialPage = Math.max(1, Number(params?.page || 1));
+  const initialQuery = (params?.query || '').trim();
 
   let where: Prisma.UserWhereInput | undefined;
 
