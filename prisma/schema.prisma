@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,9 +7,174 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* ===========================
-   Enums
-   =========================== */
+///  * ===========================
+///  * Core
+///  * ===========================
+model User {
+  id        String             @id @default(uuid())
+  email     String             @unique
+  role      Role               @default(student)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  name      String             @default("")
+  bookings  Booking[]
+  decisions EquipmentRequest[] @relation("Decider")
+  pushSubs  PushSubscription[]
+}
+
+///  * ===========================
+///  * Facility Management
+///  * ===========================
+model Facility {
+  id        String             @id @default(uuid())
+  name      String
+  type      String
+  location  String
+  rules     String?
+  photos    String[]
+  active    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  bookings  Booking[]
+  courts    Court[]
+  equipment Equipment[]
+  schedules FacilitySchedule[]
+}
+
+model FacilitySchedule {
+  id         String   @id @default(uuid())
+  facilityId String
+  dayOfWeek  Int
+  openTime   String
+  closeTime  String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, dayOfWeek])
+}
+
+///  * ===========================
+///  * Spaces (Courts) & Sports
+///  * ===========================
+model Court {
+  id              String       @id @default(uuid())
+  facilityId      String
+  name            String
+  conflictGroupId String?
+  active          Boolean      @default(true)
+  bookings        Booking[]
+  facility        Facility     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  supportedSports CourtSport[]
+
+  @@unique([facilityId, name])
+  @@index([facilityId])
+  @@index([conflictGroupId])
+  @@index([active])
+}
+
+model Sport {
+  id                 String       @id @default(uuid())
+  name               String       @unique
+  minDurationMinutes Int          @default(60)
+  maxDurationMinutes Int          @default(120)
+  createdAt          DateTime     @default(now())
+  bookings           Booking[]
+  courts             CourtSport[]
+}
+
+model CourtSport {
+  courtId String
+  sportId String
+  court   Court  @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  sport   Sport  @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@id([courtId, sportId])
+}
+
+///  * ===========================
+///  * Bookings
+///  * ===========================
+model Booking {
+  id                String             @id @default(uuid())
+  userId            String
+  facilityId        String
+  courtId           String
+  sportId           String
+  start             DateTime           @db.Timestamptz(6)
+  end               DateTime           @db.Timestamptz(6)
+  status            BookingStatus      @default(confirmed)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  court             Court              @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  facility          Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  sport             Sport              @relation(fields: [sportId], references: [id])
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  equipmentRequests EquipmentRequest[]
+
+  @@unique([courtId, start, end])
+  @@index([facilityId, start])
+  @@index([courtId, start])
+  @@index([userId, start])
+}
+
+///  * ===========================
+///  * Equipment & Requests
+///  * ===========================
+model Equipment {
+  id           String                 @id @default(uuid())
+  facilityId   String
+  name         String
+  qtyTotal     Int
+  qtyAvailable Int
+  notes        String?
+  facility     Facility               @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  requestItems EquipmentRequestItem[]
+
+  @@index([facilityId, name])
+}
+
+model EquipmentRequest {
+  id        String                 @id @default(uuid())
+  bookingId String
+  status    EquipReqStatus         @default(pending)
+  decidedBy String?
+  decidedAt DateTime?
+  note      String?
+  createdAt DateTime               @default(now())
+  booking   Booking                @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  decider   User?                  @relation("Decider", fields: [decidedBy], references: [id])
+  items     EquipmentRequestItem[]
+
+  @@index([status, createdAt])
+}
+
+model EquipmentRequestItem {
+  id          String           @id @default(uuid())
+  requestId   String
+  equipmentId String
+  qty         Int
+  equipment   Equipment        @relation(fields: [equipmentId], references: [id])
+  request     EquipmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, equipmentId])
+}
+
+///  * ===========================
+///  * PWA Push Subscriptions
+///  * ===========================
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+///  * ===========================
+///  * Enums
+///  * ===========================
 enum Role {
   student
   staff
@@ -30,181 +193,4 @@ enum EquipReqStatus {
   denied
   issued
   returned
-}
-
-/* ===========================
-   Core
-   =========================== */
-model User {
-  id         String   @id @default(uuid()) // same as Supabase Auth user.id
-  email      String   @unique
-  role       Role     @default(student)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  // Relations
-  bookings   Booking[]
-  decisions  EquipmentRequest[] @relation("Decider")
-  pushSubs   PushSubscription[]
-}
-
-/* ===========================
-   Facility Management
-   =========================== */
-model Facility {
-  id        String   @id @default(uuid())
-  name      String
-  type      String
-  location  String
-  rules     String?
-  photos    String[]
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-
-  schedules FacilitySchedule[]
-  courts    Court[]
-  bookings  Booking[]
-  equipment Equipment[]
-}
-
-model FacilitySchedule {
-  id         String   @id @default(uuid())
-  facilityId String
-  dayOfWeek  Int
-  openTime   String
-  closeTime  String
-
-  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  @@index([facilityId, dayOfWeek])
-}
-
-/* ===========================
-   Spaces (Courts) & Sports
-   =========================== */
-model Court {
-  id               String   @id @default(uuid())
-  facilityId       String
-  name             String
-  conflictGroupId  String?
-  active           Boolean  @default(true)
-
-  facility         Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  supportedSports  CourtSport[]
-  bookings         Booking[]
-
-  @@unique([facilityId, name])
-  @@index([facilityId])
-  @@index([conflictGroupId])
-  @@index([active])
-}
-
-model Sport {
-  id                 String   @id @default(uuid())
-  name               String   @unique
-  minDurationMinutes Int      @default(60)
-  maxDurationMinutes Int      @default(120)
-  createdAt          DateTime @default(now())
-
-  courts   CourtSport[]
-  bookings Booking[]
-}
-
-// Junction: many-to-many between Court and Sport
-model CourtSport {
-  courtId String
-  sportId String
-
-  court   Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
-  sport   Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
-
-  @@id([courtId, sportId])
-}
-
-/* ===========================
-   Bookings
-   =========================== */
-model Booking {
-  id         String        @id @default(uuid())
-  userId     String
-  facilityId String
-  courtId    String
-  sportId    String
-  start      DateTime      @db.Timestamptz(6)
-  end        DateTime      @db.Timestamptz(6)
-  status     BookingStatus @default(confirmed)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  court      Court    @relation(fields: [courtId], references: [id], onDelete: Cascade)
-  sport      Sport    @relation(fields: [sportId], references: [id], onDelete: Restrict)
-
-  equipmentRequests EquipmentRequest[]
-
-  @@index([facilityId, start])
-  @@index([courtId, start])
-  @@index([userId, start])
-  @@unique([courtId, start, end])
-}
-
-/* ===========================
-   Equipment & Requests
-   =========================== */
-model Equipment {
-  id           String   @id @default(uuid())
-  facilityId   String
-  name         String
-  qtyTotal     Int
-  qtyAvailable Int
-  notes        String?
-
-  facility     Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  requestItems EquipmentRequestItem[]
-
-  @@index([facilityId, name])
-}
-
-model EquipmentRequest {
-  id         String         @id @default(uuid())
-  bookingId  String
-  status     EquipReqStatus @default(pending)
-  decidedBy  String?
-  decidedAt  DateTime?
-  note       String?
-  createdAt  DateTime       @default(now())
-
-  booking    Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  items      EquipmentRequestItem[]
-  decider    User?          @relation("Decider", fields: [decidedBy], references: [id])
-
-  @@index([status, createdAt])
-}
-
-model EquipmentRequestItem {
-  id          String   @id @default(uuid())
-  requestId   String
-  equipmentId String
-  qty         Int
-
-  request     EquipmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  equipment   Equipment        @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
-
-  @@unique([requestId, equipmentId])
-}
-
-/* ===========================
-   PWA Push Subscriptions
-   =========================== */
-model PushSubscription {
-  id        String   @id @default(uuid())
-  userId    String
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  createdAt DateTime @default(now())
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
 }

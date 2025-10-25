@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,157 +29,296 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { users as initialUsers, type User } from '@/lib/data';
 import { PlusIcon, SearchIcon, TrashIcon, AlertCircleIcon } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { notify } from '@/lib/toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent } from '@/components/ui/card';
 
-export function UserManagement() {
-  const [users, setUsers] = useState<User[]>(initialUsers);
-  const [searchQuery, setSearchQuery] = useState('');
+/** Debounce helper (fires after typing stops) */
+function useDebounce<T>(value: T, delay = 450) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
+type Role = 'student' | 'staff' | 'admin';
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  createdAt: string;
+};
+
+type UserManagementProps = {
+  initialUsers?: UserRow[];
+  initialTotal?: number;
+  initialQuery?: string;
+  initialPage?: number;
+  pageSize?: number;
+};
+
+export function UserManagement({
+  initialUsers = [],
+  initialTotal = 0,
+  initialQuery = '',
+  initialPage = 1,
+  pageSize = 20,
+}: UserManagementProps) {
+  const isMobile = useIsMobile();
+
+  // list + paging
+  const [users, setUsers] = useState<UserRow[]>(initialUsers);
+  const [total, setTotal] = useState(initialTotal);
+  const [page, setPage] = useState(initialPage);
+  const pageSizeLocal = pageSize;
+
+  // ui states
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
+  const debouncedQuery = useDebounce(searchQuery, 450);
   const [showAddForm, setShowAddForm] = useState(false);
   const [pendingRoleChanges, setPendingRoleChanges] = useState<
-    Record<string, 'student' | 'staff' | 'admin'>
+    Record<string, Role>
   >({});
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserRow | null>(null);
   const [showRoleChangeConfirm, setShowRoleChangeConfirm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
     name: '',
-    role: 'student' as 'student' | 'staff' | 'admin',
+    role: 'student' as Role,
   });
-  const { toast } = useToast();
-  const isMobile = useIsMobile();
 
-  const filteredUsers = users.filter(
-    (user) =>
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Fetch users (debounced + refreshKey after mutations)
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `/api/admin/users?query=${encodeURIComponent(
+            debouncedQuery
+          )}&page=${page}&pageSize=${pageSizeLocal}`,
+          { signal: controller.signal }
+        );
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Failed to fetch users');
+        setUsers(json.users || []);
+        setTotal(json.total || 0);
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          notify.error(`Failed to load users: ${e.message}`);
+        }
+      }
+    };
+    load();
+    return () => controller.abort();
+  }, [debouncedQuery, page, refreshKey]);
 
-  const handleAddUser = () => {
+  // If the backend delivers a fresh list, drop any pending changes that match originals
+  useEffect(() => {
+    setPendingRoleChanges((prev) => {
+      const next = { ...prev };
+      for (const [id, newRole] of Object.entries(prev)) {
+        const original = users.find((u) => u.id === id)?.role;
+        if (!original || original === newRole) {
+          delete next[id];
+        }
+      }
+      return next;
+    });
+  }, [users]);
+
+  const filteredUsers = users;
+
+  const handleAddUser = async () => {
+    // Required fields
     if (!newUser.email || !newUser.password || !newUser.name) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all fields',
-        variant: 'destructive',
-      });
+      notify.error('Please fill in all required fields.');
+      return;
+    }
+    // Password rule
+    if (newUser.password.length < 8) {
+      notify.warning('Password must be at least 8 characters long.');
+      return;
+    }
+    // Basic email check
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) {
+      notify.warning('Please enter a valid email address.');
       return;
     }
 
-    const user: User = {
-      id: `u${users.length + 1}`,
-      email: newUser.email,
-      password: newUser.password,
-      name: newUser.name,
-      role: newUser.role,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      setCreating(true);
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to create user');
 
-    setUsers([...users, user]);
-    setNewUser({ email: '', password: '', name: '', role: 'student' });
-    setShowAddForm(false);
-    toast({
-      title: 'Success',
-      description: 'User created successfully',
-    });
+      // refresh list
+      setShowAddForm(false);
+      setNewUser({ email: '', password: '', name: '', role: 'student' });
+      setPage(1);
+      setSearchQuery('');
+      setRefreshKey((k) => k + 1);
+
+      notify.success('User created successfully!');
+    } catch (e: any) {
+      notify.error(`Failed to create user: ${e.message}`);
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const handleRoleSelect = (
-    userId: string,
-    newRole: 'student' | 'staff' | 'admin'
-  ) => {
-    setPendingRoleChanges({ ...pendingRoleChanges, [userId]: newRole });
+  const handleRoleSelect = (userId: string, newRole: Role) => {
+    const original = users.find((u) => u.id === userId)?.role;
+
+    setPendingRoleChanges((prev) => {
+      if (!original) return prev; // user not found, ignore
+
+      const next = { ...prev };
+      if (newRole === original) {
+        delete next[userId]; // back to original → remove pending change
+      } else {
+        next[userId] = newRole; // track changed value
+      }
+      return next;
+    });
   };
 
   const handleConfirmRoleChanges = () => {
+    if (Object.keys(pendingRoleChanges).length === 0) {
+      notify.info('Nothing to update.');
+      return;
+    }
     setShowRoleChangeConfirm(true);
   };
 
-  const applyRoleChanges = () => {
-    setUsers(
-      users.map((user) => {
-        if (pendingRoleChanges[user.id]) {
-          return { ...user, role: pendingRoleChanges[user.id] };
-        }
-        return user;
+  const applyRoleChanges = async () => {
+    const entries = Object.entries(pendingRoleChanges).filter(([id, role]) => {
+      const original = users.find((u) => u.id === id)?.role;
+      return original && original !== role;
+    });
+
+    if (entries.length === 0) {
+      notify.info('Nothing to update.');
+      return;
+    }
+
+    // optimistic UI
+    const prevUsers = users;
+    setUsers((list) =>
+      list.map((u) => {
+        const found = entries.find(([id]) => id === u.id);
+        return found ? { ...u, role: found[1] as Role } : u;
       })
     );
-    setPendingRoleChanges({});
-    setShowRoleChangeConfirm(false);
-    toast({
-      title: 'Success',
-      description: `${
-        Object.keys(pendingRoleChanges).length
-      } user role(s) updated successfully`,
-    });
+
+    try {
+      await Promise.all(
+        entries.map(async ([id, role]) => {
+          const res = await fetch(`/api/admin/users/${id}/role`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role }),
+          });
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            throw new Error(json.error || 'Failed to update role');
+          }
+        })
+      );
+      setPendingRoleChanges({});
+      notify.success(`${entries.length} user role(s) updated successfully`);
+      setRefreshKey((k) => k + 1);
+    } catch (e: any) {
+      setUsers(prevUsers); // rollback
+      notify.error(e.message || 'Update failed');
+    }
   };
 
   const handleCancelRoleChanges = () => {
     setPendingRoleChanges({});
-    toast({
-      title: 'Cancelled',
-      description: 'Role changes discarded',
-    });
+    notify.info('Role changes discarded.');
   };
 
-  const handleDeleteUser = (userId: string) => {
-    setUsers(users.filter((user) => user.id !== userId));
+  const handleDeleteUser = async (userId: string) => {
+    const prev = users;
+    setUsers(users.filter((u) => u.id !== userId)); // optimistic
     setUserToDelete(null);
-    toast({
-      title: 'Success',
-      description: 'User deleted successfully',
-    });
-  };
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to delete user');
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'destructive';
-      case 'staff':
-        return 'default';
-      default:
-        return 'secondary';
+      setRefreshKey((k) => k + 1);
+      notify.success('User deleted successfully');
+    } catch (e: any) {
+      setUsers(prev); // rollback
+      notify.error(`Failed to delete user: ${e.message}`);
     }
   };
 
-  const getRoleBadgeClassName = (role: string) => {
-    if (role === 'student') {
-      return 'bg-green-200 text-green-950 hover:bg-green-200 dark:bg-green-900 dark:text-green-50 border-green-300 dark:border-green-800';
-    }
-    return '';
-  };
+  const getRoleBadgeVariant = (role: string) =>
+    role === 'admin'
+      ? 'destructive'
+      : role === 'staff'
+      ? 'default'
+      : 'secondary';
+
+  const getRoleBadgeClassName = (role: string) =>
+    role === 'student'
+      ? 'bg-green-200 text-green-950 hover:bg-green-200 dark:bg-green-900 dark:text-green-50 border-green-300 dark:border-green-800'
+      : '';
 
   const hasPendingChanges = Object.keys(pendingRoleChanges).length > 0;
 
-  const getPendingChangesList = () => {
-    return users
-      .filter((user) => pendingRoleChanges[user.id])
-      .map((user) => ({
-        name: user.name,
-        email: user.email,
-        currentRole: user.role,
-        newRole: pendingRoleChanges[user.id],
-      }));
-  };
+  const pendingList = useMemo(
+    () =>
+      users
+        .filter((u) => pendingRoleChanges[u.id])
+        .map((u) => ({
+          name: u.name,
+          email: u.email,
+          currentRole: u.role,
+          newRole: pendingRoleChanges[u.id]!,
+        })),
+    [users, pendingRoleChanges]
+  );
+
+  const showingCount = Math.min(
+    pageSize,
+    Math.max(0, total - (page - 1) * pageSize)
+  );
 
   return (
     <div className="space-y-6">
+      {/* Search + Add */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="relative flex-1 max-w-md w-full">
-          <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by email, name, or role..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setPage(1);
+              setSearchQuery(e.target.value);
+            }}
             className="pl-10 border-3 border-primary/20 focus:border-primary shadow-sm"
           />
         </div>
         <Button
-          onClick={() => setShowAddForm(!showAddForm)}
+          onClick={() => setShowAddForm((s) => !s)}
           className="gap-2 w-full sm:w-auto"
         >
           <PlusIcon className="h-4 w-4" />
@@ -190,17 +329,10 @@ export function UserManagement() {
       {/* Add User Form */}
       {showAddForm && (
         <div className="border rounded-lg p-6 space-y-4 bg-card">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-            Create New User
-          </h3>
+          <h3 className="text-lg font-bold">Create New User</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label
-                htmlFor="name"
-                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
-              >
-                Full Name
-              </Label>
+              <Label htmlFor="name">Full Name</Label>
               <Input
                 id="name"
                 placeholder="John Doe"
@@ -212,12 +344,7 @@ export function UserManagement() {
               />
             </div>
             <div className="space-y-2">
-              <Label
-                htmlFor="email"
-                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
-              >
-                Email
-              </Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -230,16 +357,11 @@ export function UserManagement() {
               />
             </div>
             <div className="space-y-2">
-              <Label
-                htmlFor="password"
-                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
-              >
-                Password
-              </Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter password"
+                placeholder="At least 8 characters"
                 value={newUser.password}
                 onChange={(e) =>
                   setNewUser({ ...newUser, password: e.target.value })
@@ -248,15 +370,10 @@ export function UserManagement() {
               />
             </div>
             <div className="space-y-2">
-              <Label
-                htmlFor="role"
-                className="text-gray-900 dark:text-gray-100 font-semibold text-[15px]"
-              >
-                Role
-              </Label>
+              <Label htmlFor="role">Role</Label>
               <Select
                 value={newUser.role}
-                onValueChange={(value: any) =>
+                onValueChange={(value: Role) =>
                   setNewUser({ ...newUser, role: value })
                 }
               >
@@ -300,21 +417,22 @@ export function UserManagement() {
             <Button variant="outline" onClick={() => setShowAddForm(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddUser}>Create User</Button>
+            <Button onClick={handleAddUser} disabled={creating}>
+              {creating ? 'Creating...' : 'Create User'}
+            </Button>
           </div>
         </div>
       )}
 
+      {/* Pending changes banner */}
       {hasPendingChanges && (
         <div className="border-2 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 flex flex-col sm:flex-row items-start gap-3 shadow-sm">
           <AlertCircleIcon className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
-            <h4 className="font-semibold text-amber-900 dark:text-amber-100">
-              Pending Role Changes
-            </h4>
-            <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
-              You have {Object.keys(pendingRoleChanges).length} pending role
-              change(s). Click "Confirm Changes" to apply them.
+            <h4 className="font-semibold">Pending Role Changes</h4>
+            <p className="text-sm">
+              You have {Object.keys(pendingRoleChanges).length} pending
+              change(s). Click “Confirm Changes” to apply.
             </p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
@@ -322,14 +440,13 @@ export function UserManagement() {
               variant="outline"
               size="sm"
               onClick={handleCancelRoleChanges}
-              className="flex-1 sm:flex-none border-amber-600 dark:border-amber-400 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-950/40 bg-transparent"
             >
               Cancel
             </Button>
             <Button
               size="sm"
               onClick={handleConfirmRoleChanges}
-              className="flex-1 sm:flex-none bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700"
+              className="bg-amber-600 hover:bg-amber-700"
             >
               Confirm Changes
             </Button>
@@ -337,7 +454,7 @@ export function UserManagement() {
         </div>
       )}
 
-      {/* Users Table */}
+      {/* Users table / cards */}
       {isMobile ? (
         <div className="space-y-4">
           {filteredUsers.length === 0 ? (
@@ -350,7 +467,6 @@ export function UserManagement() {
             filteredUsers.map((user) => {
               const displayRole = pendingRoleChanges[user.id] || user.role;
               const hasPendingChange = !!pendingRoleChanges[user.id];
-
               return (
                 <Card
                   key={user.id}
@@ -373,15 +489,14 @@ export function UserManagement() {
                         </p>
                       </div>
                     </div>
-
                     <div>
                       <Label className="text-sm text-muted-foreground">
                         Role
                       </Label>
                       <Select
                         value={displayRole}
-                        onValueChange={(value: any) =>
-                          handleRoleSelect(user.id, value)
+                        onValueChange={(v: Role) =>
+                          handleRoleSelect(user.id, v)
                         }
                       >
                         <SelectTrigger className="w-full mt-1 border-3 border-primary/20 focus:border-primary shadow-sm">
@@ -417,15 +532,13 @@ export function UserManagement() {
                         </SelectContent>
                       </Select>
                     </div>
-
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setUserToDelete(user)}
-                      className="w-full text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/20 border-red-200 dark:border-red-900"
+                      className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/20"
                     >
-                      <TrashIcon className="h-4 w-4 mr-2" />
-                      Delete User
+                      <TrashIcon className="h-4 w-4 mr-2" /> Delete User
                     </Button>
                   </CardContent>
                 </Card>
@@ -438,21 +551,11 @@ export function UserManagement() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                  Name
-                </TableHead>
-                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                  Email
-                </TableHead>
-                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                  Role
-                </TableHead>
-                <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                  Created
-                </TableHead>
-                <TableHead className="text-right font-bold text-gray-900 dark:text-gray-100">
-                  Actions
-                </TableHead>
+                <TableHead className="font-bold">Name</TableHead>
+                <TableHead className="font-bold">Email</TableHead>
+                <TableHead className="font-bold">Role</TableHead>
+                <TableHead className="font-bold">Created</TableHead>
+                <TableHead className="text-right font-bold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -469,7 +572,6 @@ export function UserManagement() {
                 filteredUsers.map((user) => {
                   const displayRole = pendingRoleChanges[user.id] || user.role;
                   const hasPendingChange = !!pendingRoleChanges[user.id];
-
                   return (
                     <TableRow
                       key={user.id}
@@ -479,20 +581,20 @@ export function UserManagement() {
                           : ''
                       }`}
                     >
-                      <TableCell className="font-semibold text-gray-900 dark:text-gray-100">
+                      <TableCell className="font-semibold">
                         {user.name}
                       </TableCell>
-                      <TableCell className="font-medium text-gray-800 dark:text-gray-200">
+                      <TableCell className="font-medium">
                         {user.email}
                       </TableCell>
                       <TableCell>
                         <Select
                           value={displayRole}
-                          onValueChange={(value: any) =>
-                            handleRoleSelect(user.id, value)
+                          onValueChange={(v: Role) =>
+                            handleRoleSelect(user.id, v)
                           }
                         >
-                          <SelectTrigger className="w-[140px] border-3 border-primary/20 focus:border-primary shadow-sm">
+                          <SelectTrigger className="w-[160px] border-3 border-primary/20 focus:border-primary shadow-sm">
                             <Badge
                               variant={getRoleBadgeVariant(displayRole)}
                               className={`capitalize ${getRoleBadgeClassName(
@@ -528,7 +630,7 @@ export function UserManagement() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell className="font-medium text-gray-800 dark:text-gray-200">
+                      <TableCell className="font-medium">
                         {new Date(user.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-right">
@@ -536,7 +638,7 @@ export function UserManagement() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setUserToDelete(user)}
-                          className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/30"
                         >
                           <TrashIcon className="h-4 w-4" />
                         </Button>
@@ -547,49 +649,67 @@ export function UserManagement() {
               )}
             </TableBody>
           </Table>
+
+          {/* Pager */}
+          <div className="flex items-center justify-between p-3 text-sm">
+            <div>
+              Page {page} • Showing {showingCount} of {total}
+            </div>
+            <div className="space-x-2">
+              <Button
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className={`rounded-md bg-[#0A66C2] text-white font-semibold px-4 py-2 transition-colors ${
+                  page <= 1
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:bg-[#004C99]'
+                }`}
+              >
+                Prev
+              </Button>
+
+              <Button
+                size="sm"
+                disabled={page * pageSize >= total}
+                onClick={() => setPage((p) => p + 1)}
+                className={`rounded-md bg-[#0A66C2] text-white font-semibold px-4 py-2 transition-colors ${
+                  page * pageSize >= total
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:bg-[#004C99]'
+                }`}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Summary Stats */}
+      {/* Summary */}
       <div className="flex flex-wrap gap-3 text-sm bg-muted/50 rounded-lg p-4 border">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-800 dark:text-gray-200 font-semibold">
-            Total Users:
-          </span>
-          <span className="font-bold text-gray-900 dark:text-gray-100">
-            {users.length}
-          </span>
-        </div>
-        <span className="text-muted-foreground">•</span>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-800 dark:text-gray-200 font-semibold">
-            Admins:
-          </span>
-          <span className="font-bold text-red-600 dark:text-red-400">
-            {users.filter((u) => u.role === 'admin').length}
-          </span>
-        </div>
-        <span className="text-muted-foreground">•</span>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-800 dark:text-gray-200 font-semibold">
-            Staff:
-          </span>
-          <span className="font-bold text-blue-600 dark:text-blue-400">
-            {users.filter((u) => u.role === 'staff').length}
-          </span>
-        </div>
-        <span className="text-muted-foreground">•</span>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-800 dark:text-gray-200 font-semibold">
-            Students:
-          </span>
-          <span className="font-bold text-green-600 dark:text-green-400">
-            {users.filter((u) => u.role === 'student').length}
-          </span>
-        </div>
+        <Stat label="Total Users" value={users.length} />
+        <Dot />
+        <Stat
+          label="Admins"
+          value={users.filter((u) => u.role === 'admin').length}
+          className="text-red-600 dark:text-red-400"
+        />
+        <Dot />
+        <Stat
+          label="Staff"
+          value={users.filter((u) => u.role === 'staff').length}
+          className="text-blue-600 dark:text-blue-400"
+        />
+        <Dot />
+        <Stat
+          label="Students"
+          value={users.filter((u) => u.role === 'student').length}
+          className="text-green-600 dark:text-green-400"
+        />
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete dialog */}
       <AlertDialog
         open={!!userToDelete}
         onOpenChange={(open) => !open && setUserToDelete(null)}
@@ -624,6 +744,7 @@ export function UserManagement() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Confirm role changes */}
       <AlertDialog
         open={showRoleChangeConfirm}
         onOpenChange={setShowRoleChangeConfirm}
@@ -633,36 +754,35 @@ export function UserManagement() {
             <AlertDialogTitle>Confirm Role Changes</AlertDialogTitle>
             <AlertDialogDescription>
               You are about to change the roles for{' '}
-              {Object.keys(pendingRoleChanges).length} user(s). Please review
-              the changes below:
+              {Object.keys(pendingRoleChanges).length} user(s).
               <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
-                {getPendingChangesList().map((change, index) => (
-                  <div key={index} className="p-4 bg-muted rounded-lg border">
+                {pendingList.map((c, i) => (
+                  <div key={i} className="p-4 bg-muted rounded-lg border">
                     <div className="font-semibold text-foreground">
-                      {change.name}
+                      {c.name}
                     </div>
                     <div className="text-sm text-muted-foreground mt-1">
-                      {change.email}
+                      {c.email}
                     </div>
                     <div className="flex items-center gap-2 mt-3">
                       <Badge
-                        variant={getRoleBadgeVariant(change.currentRole)}
+                        variant={getRoleBadgeVariant(c.currentRole)}
                         className={`capitalize font-medium ${getRoleBadgeClassName(
-                          change.currentRole
+                          c.currentRole
                         )}`}
                       >
-                        {change.currentRole}
+                        {c.currentRole}
                       </Badge>
                       <span className="text-muted-foreground font-medium">
                         →
                       </span>
                       <Badge
-                        variant={getRoleBadgeVariant(change.newRole)}
+                        variant={getRoleBadgeVariant(c.newRole)}
                         className={`capitalize font-medium ${getRoleBadgeClassName(
-                          change.newRole
+                          c.newRole
                         )}`}
                       >
-                        {change.newRole}
+                        {c.newRole}
                       </Badge>
                     </div>
                   </div>
@@ -680,4 +800,25 @@ export function UserManagement() {
       </AlertDialog>
     </div>
   );
+}
+
+function Stat({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: number | string;
+  className?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-semibold">{label}:</span>
+      <span className={`font-bold ${className || ''}`}>{value}</span>
+    </div>
+  );
+}
+
+function Dot() {
+  return <span className="text-muted-foreground">•</span>;
 }

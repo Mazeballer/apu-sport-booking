@@ -30,31 +30,21 @@ export function getUserRole(): 'student' | 'staff' | 'admin' | '' {
   return '';
 }
 
-/** Auth state via Supabase (source of truth) */
+/** Check whether a Supabase session currently exists */
 export async function isAuthenticated(): Promise<boolean> {
   const supabase = createBrowserClient();
   const { data } = await supabase.auth.getSession();
   return !!data.session;
 }
 
-/** Proper logout: client signout + clear server cookies + clear cache + redirect */
+/** Logout: end Supabase session + clear cache + redirect */
 export async function logout() {
+  const supabase = createBrowserClient();
   try {
-    const supabase = createBrowserClient();
-
-    // 1) end client session
-    await supabase.auth.signOut();
-
-    // 2) clear httpOnly cookies on the server so middleware stops seeing a session
-    await fetch('/api/auth/signout', { method: 'POST' });
-
-    // 3) clear local cache
-    clearUserCache();
-
-    // 4) hard redirect to login (no history bounce)
-    window.location.replace('/login');
+    await supabase.auth.signOut(); // clears both access & refresh cookies
   } catch (e) {
-    console.error('Logout failed', e);
-    window.location.replace('/login');
+    console.error('Supabase signOut error:', e);
   }
+  clearUserCache();
+  window.location.replace('/login');
 }

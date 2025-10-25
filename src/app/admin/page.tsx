@@ -10,6 +10,7 @@ import { EquipmentStatus } from '@/components/admin/equipment-status';
 import { AnalyticsDashboard } from '@/components/admin/analytics-dashboard';
 import { UserManagement } from '@/components/admin/user-management';
 import { Navbar } from '@/components/navbar';
+import { Prisma, Role as PrismaRole } from '@prisma/client';
 import {
   BuildingIcon,
   ClockIcon,
@@ -19,8 +20,12 @@ import {
   WrenchIcon,
 } from 'lucide-react';
 
-// Server-side guard: check session + role before rendering
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams?: { page?: string; query?: string };
+}) {
+  // 1) Server-side auth (session) + role gate (admin only)
   const supabase = await createServerSupabase();
   const {
     data: { session },
@@ -28,16 +33,74 @@ export default async function AdminPage() {
   if (!session) redirect('/login?redirect=/admin');
 
   const email = session.user.email!;
-  const user = await prisma.user.findUnique({
+  const me = await prisma.user.findUnique({
     where: { email },
     select: { role: true },
   });
-
-  if (!user || user.role !== 'admin') {
+  if (!me || me.role !== 'admin') {
     redirect('/'); // not authorized
   }
 
-  // render as normal
+  // 2) Preload users for the Users tab (SSR)
+  const pageSize = 20;
+  const initialPage = Math.max(1, Number(searchParams?.page || 1));
+  const initialQuery = (searchParams?.query || '').trim();
+
+  let where: Prisma.UserWhereInput | undefined;
+
+  if (initialQuery.length > 0) {
+    // if the query literally matches a role, allow role filter too
+    const roleFromQuery = (['admin', 'staff', 'student'] as const).find(
+      (r) => r === initialQuery.toLowerCase()
+    ) as PrismaRole | undefined;
+
+    where = {
+      OR: [
+        {
+          email: {
+            contains: initialQuery,
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
+        {
+          name: {
+            contains: initialQuery,
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
+        ...(roleFromQuery
+          ? ([{ role: roleFromQuery }] as Prisma.UserWhereInput[])
+          : []),
+      ],
+    };
+  } else {
+    where = undefined;
+  }
+
+  const [initialUsers, initialTotal] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (initialPage - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  // Make dates serializable for client props
+  const initialUsersSerializable = initialUsers.map((u) => ({
+    ...u,
+    createdAt: u.createdAt.toISOString(),
+  }));
+
+  // 3) Render
   return (
     <>
       <Navbar />
@@ -59,6 +122,7 @@ export default async function AdminPage() {
                 <TrendingUpIcon className="h-4 w-4" />
                 <span>Analytics</span>
               </TabsTrigger>
+
               <TabsTrigger
                 value="facilities"
                 className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
@@ -66,6 +130,7 @@ export default async function AdminPage() {
                 <BuildingIcon className="h-4 w-4" />
                 <span className="text-xs lg:text-sm">Facilities</span>
               </TabsTrigger>
+
               <TabsTrigger
                 value="hours"
                 className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
@@ -73,6 +138,7 @@ export default async function AdminPage() {
                 <ClockIcon className="h-4 w-4" />
                 <span className="text-xs lg:text-sm">Hours</span>
               </TabsTrigger>
+
               <TabsTrigger
                 value="equipment"
                 className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
@@ -80,6 +146,7 @@ export default async function AdminPage() {
                 <PackageIcon className="h-4 w-4" />
                 <span className="text-xs lg:text-sm">Inventory</span>
               </TabsTrigger>
+
               <TabsTrigger
                 value="equipment-status"
                 className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
@@ -87,6 +154,7 @@ export default async function AdminPage() {
                 <WrenchIcon className="h-4 w-4" />
                 <span className="text-xs lg:text-sm">Status</span>
               </TabsTrigger>
+
               <TabsTrigger
                 value="users"
                 className="flex-col py-2 px-3 lg:flex-row lg:gap-2 lg:py-3 flex data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground data-[state=active]:font-semibold whitespace-nowrap flex-shrink-0 rounded-lg"
@@ -165,7 +233,13 @@ export default async function AdminPage() {
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <UserManagement />
+                  <UserManagement
+                    initialUsers={initialUsersSerializable}
+                    initialTotal={initialTotal}
+                    initialQuery={initialQuery}
+                    initialPage={initialPage}
+                    pageSize={pageSize}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>

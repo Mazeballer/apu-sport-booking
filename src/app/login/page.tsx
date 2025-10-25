@@ -7,7 +7,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Toaster, toast } from 'sonner';
+import { notify } from '@/lib/toast';
+
 import {
   Card,
   CardContent,
@@ -67,7 +68,7 @@ function LoginInner() {
       // 4) Cache locally + toast
       localStorage.setItem('user_email', email);
       localStorage.setItem('user_role', role);
-      toast.success('Logged in successfully');
+      notify.success('Logged in successfully');
 
       // 5) Redirect based on role
       const target =
@@ -82,7 +83,7 @@ function LoginInner() {
       return;
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Invalid email or password');
+      notify.error(err.message || 'Invalid email or password');
       setError(err.message || 'Invalid email or password');
     } finally {
       setIsLoading(false);
@@ -183,8 +184,6 @@ function LoginInner() {
           </Alert>
         </CardContent>
       </Card>
-
-      <Toaster />
     </div>
   );
 }
