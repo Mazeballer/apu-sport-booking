@@ -7,9 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-///  * ===========================
-///  * Core
-///  * ===========================
+/// * ===========================
+/// * Core
+/// * ===========================
 model User {
   id        String             @id @default(uuid())
   email     String             @unique
@@ -17,14 +17,15 @@ model User {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   name      String             @default("")
+  authId    String?            @unique
   bookings  Booking[]
   decisions EquipmentRequest[] @relation("Decider")
   pushSubs  PushSubscription[]
 }
 
-///  * ===========================
-///  * Facility Management
-///  * ===========================
+/// * ===========================
+/// * Facility Management
+/// * ===========================
 model Facility {
   id        String             @id @default(uuid())
   name      String
@@ -51,9 +52,9 @@ model FacilitySchedule {
   @@index([facilityId, dayOfWeek])
 }
 
-///  * ===========================
-///  * Spaces (Courts) & Sports
-///  * ===========================
+/// * ===========================
+/// * Spaces (Courts) & Sports
+/// * ===========================
 model Court {
   id              String       @id @default(uuid())
   facilityId      String
@@ -89,9 +90,9 @@ model CourtSport {
   @@id([courtId, sportId])
 }
 
-///  * ===========================
-///  * Bookings
-///  * ===========================
+/// * ===========================
+/// * Bookings
+/// * ===========================
 model Booking {
   id                String             @id @default(uuid())
   userId            String
@@ -115,9 +116,9 @@ model Booking {
   @@index([userId, start])
 }
 
-///  * ===========================
-///  * Equipment & Requests
-///  * ===========================
+/// * ===========================
+/// * Equipment & Requests
+/// * ===========================
 model Equipment {
   id           String                 @id @default(uuid())
   facilityId   String
@@ -157,9 +158,9 @@ model EquipmentRequestItem {
   @@unique([requestId, equipmentId])
 }
 
-///  * ===========================
-///  * PWA Push Subscriptions
-///  * ===========================
+/// * ===========================
+/// * PWA Push Subscriptions
+/// * ===========================
 model PushSubscription {
   id        String   @id @default(uuid())
   userId    String
@@ -172,9 +173,9 @@ model PushSubscription {
   @@index([userId])
 }
 
-///  * ===========================
-///  * Enums
-///  * ===========================
+/// * ===========================
+/// * Enums
+/// * ===========================
 enum Role {
   student
   staff

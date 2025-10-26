@@ -1,27 +1,28 @@
 // src/middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(req: NextRequest) {
-  const pathname = req.nextUrl.pathname;
+  const { pathname } = req.nextUrl;
 
-  // 1) Let API, Next internals, and static assets pass
+  // allow API, Next internals, and static files
   if (
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/_next') ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/_next") ||
     /\.[a-zA-Z0-9]+$/.test(pathname)
   ) {
     return NextResponse.next();
   }
 
-  // 2) Public routes that don't require auth
-  const publicRoutes = ['/login', '/forgot-password', '/reset-password'];
-  const isPublic = publicRoutes.some((p) => pathname.startsWith(p));
-  if (isPublic) return NextResponse.next();
+  // public routes
+  const publicRoutes = ["/login", "/forgot-password", "/reset-password"];
+  if (publicRoutes.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
 
-  // 3) Create Supabase client with the *middleware* cookie API (getAll/setAll)
-  let res = NextResponse.next();
+  // create a response up front so we can attach refreshed cookies to it
+  const res = NextResponse.next({ request: { headers: req.headers } });
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -31,8 +32,6 @@ export async function middleware(req: NextRequest) {
           return req.cookies.getAll();
         },
         setAll(cookies) {
-          // If Supabase refreshes cookies, write them onto the response
-          res = NextResponse.next({ request: { headers: req.headers } });
           cookies.forEach(({ name, value, options }) => {
             res.cookies.set({ name, value, ...options });
           });
@@ -41,24 +40,19 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // 4) Secure: verify user with Supabase Auth server
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  // verify with Supabase Auth server
+  const { data: { user }, error } = await supabase.auth.getUser();
 
-  // If verification failed or no user -> send to login with redirect back
   if (error || !user) {
-    const url = new URL('/login', req.url);
-    url.searchParams.set('redirect', pathname);
+    const url = new URL("/login", req.url);
+    // internal paths only
+    const back = pathname.startsWith("/") ? pathname : "/";
+    url.searchParams.set("redirect", back);
     return NextResponse.redirect(url);
   }
 
-  // Authenticated -> allow through
   return res;
 }
 
-// Next.js 15-safe matcher: exclude /api, _next, and files
-export const config = {
-  matcher: ['/((?!api|_next|.*\\..*).*)'],
-};
+// match everything except api, _next, and files
+export const config = { matcher: ["/((?!api|_next|.*\\..*).*)"] };

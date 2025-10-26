@@ -58,11 +58,14 @@ function LoginInner() {
         }),
       });
       if (!bridge.ok) throw new Error('Failed to set auth cookies');
-
+      const upsertRes = await fetch('/api/auth/upsert-user', {
+        method: 'POST',
+      });
+      if (!upsertRes.ok) {
+        console.warn('upsert-user failed');
+      }
       // 3) Fetch user role
-      const res = await fetch(
-        `/api/users/role?email=${encodeURIComponent(email)}`
-      );
+      const res = await fetch('/api/users/role', { cache: 'no-store' });
       const { role } = await res.json();
 
       // 4) Cache locally + toast
