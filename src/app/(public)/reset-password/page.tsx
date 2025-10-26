@@ -16,6 +16,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { createClient } from '@/lib/supabase/client';
 import zxcvbn from 'zxcvbn';
+import { CheckCircle2 } from 'lucide-react';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -99,6 +100,21 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen grid place-items-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
+          <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-2">
+            <svg
+              className="w-10 h-10 text-primary-foreground"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+              />
+            </svg>
+          </div>
           <CardTitle>Reset Password</CardTitle>
           <CardDescription>Enter your new password</CardDescription>
         </CardHeader>
@@ -108,9 +124,10 @@ export default function ResetPasswordPage() {
               <AlertDescription>{err || 'Checking link...'}</AlertDescription>
             </Alert>
           ) : done ? (
-            <Alert>
-              <AlertDescription>
-                Password updated. Redirecting to login.
+            <Alert className="bg-green-200 dark:bg-green-950 border-green-600 dark:border-green-800">
+              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                Password updated. Redirecting to login...
               </AlertDescription>
             </Alert>
           ) : (
@@ -124,6 +141,7 @@ export default function ResetPasswordPage() {
                   onChange={(e) => setPwd(e.target.value)}
                   required
                   minLength={8}
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 />
                 <div className="h-1.5 w-full bg-muted overflow-hidden rounded">
                   <div
@@ -150,6 +168,7 @@ export default function ResetPasswordPage() {
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   required
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 />
               </div>
 
