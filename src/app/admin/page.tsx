@@ -28,15 +28,22 @@ export default async function AdminPage({
   // 1) Server-side auth (session) + role gate (admin only)
   const supabase = await createServerSupabase();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) redirect('/login?redirect=/admin');
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?redirect=/admin');
 
-  const email = session.user.email!;
-  const me = await prisma.user.findUnique({
-    where: { email },
-    select: { role: true },
-  });
+  const me =
+    (await prisma.user.findUnique({
+      where: { authId: user.id },
+      select: { role: true },
+    })) ??
+    (user.email
+      ? await prisma.user.findUnique({
+          where: { email: user.email },
+          select: { role: true },
+        })
+      : null);
+
   if (!me || me.role !== 'admin') {
     redirect('/'); // not authorized
   }
