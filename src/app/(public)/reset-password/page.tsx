@@ -1,8 +1,7 @@
+// src/app/(public)/reset-password/page.tsx
 'use client';
 
-import type React from 'react';
-
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,158 +9,162 @@ import { Label } from '@/components/ui/label';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import zxcvbn from 'zxcvbn';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [isValidToken, setIsValidToken] = useState(false);
+  const [tokenReady, setTokenReady] = useState(false);
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const [pwd, setPwd] = useState('');
+  const [confirm, setConfirm] = useState('');
 
   useEffect(() => {
-    // Check if user has a valid recovery token
-    const checkSession = async () => {
+    const run = async () => {
       const supabase = createClient();
-      const { data } = await supabase.auth.getSession();
 
-      if (data.session) {
-        setIsValidToken(true);
-      } else {
-        setError('Invalid or expired reset link. Please request a new one.');
+      // If already holding a session, allow form
+      const cur = await supabase.auth.getSession();
+      if (cur.data.session) {
+        setTokenReady(true);
+        return;
+      }
+
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+      if (!code) {
+        setErr('Missing code in the URL. Request a new link.');
+        return;
+      }
+
+      // Try exchanging PKCE code
+      const ex = await supabase.auth.exchangeCodeForSession(code);
+      if (ex.error) {
+        console.error('exchangeCodeForSession error', ex.error);
+        setErr(
+          'Invalid or expired reset link. Request a new one and open it in the same browser.'
+        );
+        return;
+      }
+      if (ex.data.session) {
+        history.replaceState(null, '', window.location.pathname);
+        setTokenReady(true);
       }
     };
-
-    checkSession();
+    run();
   }, []);
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const zx = useMemo(() => zxcvbn(pwd), [pwd]);
+  const strong = zx.score >= 3;
+
+  const valid =
+    pwd.length >= 8 &&
+    /[A-Z]/.test(pwd) &&
+    /[a-z]/.test(pwd) &&
+    /[0-9]/.test(pwd) &&
+    /[^A-Za-z0-9]/.test(pwd) &&
+    pwd === confirm &&
+    strong &&
+    tokenReady;
+
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setIsLoading(false);
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      setIsLoading(false);
-      return;
-    }
-
+    if (!valid) return;
+    setLoading(true);
+    setErr('');
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.updateUser({
-        password: password,
-      });
-
+      const { error } = await supabase.auth.updateUser({ password: pwd });
       if (error) throw error;
 
-      setSuccess(true);
-
-      // Redirect to login after 2 seconds
-      setTimeout(() => {
-        router.push('/login');
-      }, 2000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password');
+      await supabase.auth.signOut(); // end the one time recovery session
+      setDone(true);
+      setTimeout(() => router.replace('/login'), 1200);
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to update password');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-2">
-          <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-2">
-            <svg
-              className="w-10 h-10 text-primary-foreground"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-              />
-            </svg>
-          </div>
-          <CardTitle className="text-2xl font-bold text-center">
-            Reset Password
-          </CardTitle>
-          <CardDescription className="text-center">
-            Enter your new password below
-          </CardDescription>
+    <div className="min-h-screen grid place-items-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Reset Password</CardTitle>
+          <CardDescription>Enter your new password</CardDescription>
         </CardHeader>
         <CardContent>
-          {!isValidToken && error ? (
-            <div className="space-y-4">
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-              <Button asChild className="w-full">
-                <a href="/forgot-password">Request New Reset Link</a>
-              </Button>
-            </div>
-          ) : success ? (
-            <div className="space-y-4">
-              <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
-                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <AlertDescription className="text-green-800 dark:text-green-200">
-                  Password reset successful! Redirecting to login...
-                </AlertDescription>
-              </Alert>
-            </div>
+          {!tokenReady && !done ? (
+            <Alert variant="destructive">
+              <AlertDescription>{err || 'Checking link...'}</AlertDescription>
+            </Alert>
+          ) : done ? (
+            <Alert>
+              <AlertDescription>
+                Password updated. Redirecting to login.
+              </AlertDescription>
+            </Alert>
           ) : (
-            <form onSubmit={handleResetPassword} className="space-y-4">
+            <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">New Password</Label>
+                <Label htmlFor="pwd">New password</Label>
                 <Input
-                  id="password"
+                  id="pwd"
                   type="password"
-                  placeholder="Enter new password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={pwd}
+                  onChange={(e) => setPwd(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
+                <div className="h-1.5 w-full bg-muted overflow-hidden rounded">
+                  <div
+                    className={`h-1.5 ${
+                      zx.score >= 3
+                        ? 'bg-green-500'
+                        : zx.score === 2
+                        ? 'bg-orange-500'
+                        : 'bg-red-500'
+                    }`}
+                    style={{ width: `${((zx.score + 1) / 5) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use at least 8 characters with upper, lower, number and symbol
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirm">Confirm password</Label>
                 <Input
-                  id="confirmPassword"
+                  id="confirm"
                   type="password"
-                  placeholder="Confirm new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
                   required
-                  minLength={6}
                 />
               </div>
 
-              {error && (
+              {err && (
                 <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
+                  <AlertDescription>{err}</AlertDescription>
                 </Alert>
               )}
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Resetting...' : 'Reset Password'}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={!valid || loading}
+              >
+                {loading ? 'Updating...' : 'Reset password'}
               </Button>
             </form>
           )}
