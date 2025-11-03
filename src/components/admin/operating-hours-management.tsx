@@ -43,7 +43,7 @@ export function OperatingHoursManagement() {
 
             <Separator />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
               <div className="space-y-2">
                 <Label htmlFor={`start-${facility.id}`}>Opening Time</Label>
                 <Input
@@ -53,7 +53,7 @@ export function OperatingHoursManagement() {
                   onChange={(e) => {
                     facility.operatingHours.start = e.target.value;
                   }}
-                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm w-full max-w-md"
                 />
               </div>
 
@@ -66,7 +66,7 @@ export function OperatingHoursManagement() {
                   onChange={(e) => {
                     facility.operatingHours.end = e.target.value;
                   }}
-                  className="border-3 border-primary/20 focus:border-primary shadow-sm"
+                  className="border-3 border-primary/20 focus:border-primary shadow-sm w-full max-w-md"
                 />
               </div>
             </div>

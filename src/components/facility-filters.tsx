@@ -33,7 +33,7 @@ export function FacilityFilters({
   const hasActiveFilters = sportType !== 'all' || locationType !== 'all';
 
   return (
-    <Card className="sticky top-20 z-40 mb-8 p-4 shadow-md bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    <Card className="mb-8 p-4 shadow-md bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="flex items-center gap-2 text-sm font-medium">
           <FilterIcon className="h-4 w-4 text-primary" />

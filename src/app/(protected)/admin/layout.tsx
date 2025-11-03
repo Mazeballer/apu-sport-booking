@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 
-export default async function AdminLayout({
+export default async function ProtectedLayout({
   children,
 }: {
   children: ReactNode;
@@ -14,8 +14,8 @@ export default async function AdminLayout({
   const supabase = await createServerSupabase();
   const {
     data: { user },
-  } = await supabase.auth.getUser(); // verified on server
-  if (!user) redirect('/login?redirect=/admin');
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?redirect=/');
 
   const me =
     (await prisma.user.findUnique({

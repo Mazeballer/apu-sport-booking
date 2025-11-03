@@ -267,13 +267,13 @@ export function IssueReturnFlow() {
       <TabsList className="grid w-full grid-cols-2 bg-transparent gap-2 p-0">
         <TabsTrigger
           value="issue"
-          className="data-[state=active]:border-3 data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-semibold rounded-xl data-[state=inactive]:border-0 data-[state=inactive]:bg-muted/50"
+          className="flex items-center justify-center gap-1.5 text-sm md:text-sm px-3 py-2.5 md:py-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:border-blue-500 data-[state=active]:border-2 dark:data-[state=active]:bg-blue-900/30 dark:data-[state=active]:text-blue-100 dark:data-[state=active]:border-blue-500 rounded-xl data-[state=inactive]:border-0 data-[state=inactive]:bg-muted/50 transition-all min-h-[44px]"
         >
           Issue Equipment
         </TabsTrigger>
         <TabsTrigger
           value="return"
-          className="data-[state=active]:border-3 data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-semibold rounded-xl data-[state=inactive]:border-0 data-[state=inactive]:bg-muted/50"
+          className="flex items-center justify-center gap-1.5 text-sm md:text-sm px-3 py-2.5 md:py-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:border-blue-500 data-[state=active]:border-2 dark:data-[state=active]:bg-blue-900/30 dark:data-[state=active]:text-blue-100 dark:data-[state=active]:border-blue-500 rounded-xl data-[state=inactive]:border-0 data-[state=inactive]:bg-muted/50 transition-all min-h-[44px]"
         >
           Return Equipment
         </TabsTrigger>
