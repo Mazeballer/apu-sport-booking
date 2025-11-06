@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { equipment, facilities } from '@/lib/data';
+import { useEffect, useState } from 'react';
+import { useActionState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,7 +28,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
 import { PlusIcon, EditIcon, PackageIcon, TrashIcon } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
@@ -44,166 +43,105 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  upsertEquipment,
+  deleteEquipmentAction,
+  type ActionResult,
+} from '@/app/(protected)/admin/inventory/actions';
+import { notify } from '@/lib/toast';
+
+type Facility = { id: string; name: string };
+type EquipmentRow = {
+  id: string;
+  name: string;
+  facilityId: string;
+  qtyTotal: number;
+  qtyAvailable: number;
+};
 
 function getAvailabilityVariant(
-  percent: number
+  p: number
 ): 'success' | 'warning' | 'danger' | 'critical' {
-  if (percent >= 70) return 'success';
-  if (percent >= 40) return 'warning';
-  if (percent >= 10) return 'danger';
+  if (p >= 70) return 'success';
+  if (p >= 40) return 'warning';
+  if (p >= 10) return 'danger';
   return 'critical';
 }
-
-function getAvailabilityTextColor(percent: number): string {
-  if (percent >= 70) return 'text-emerald-700 dark:text-emerald-400';
-  if (percent >= 40) return 'text-amber-700 dark:text-amber-400';
-  if (percent >= 10) return 'text-orange-700 dark:text-orange-400';
+function getAvailabilityTextColor(p: number): string {
+  if (p >= 70) return 'text-emerald-700 dark:text-emerald-400';
+  if (p >= 40) return 'text-amber-700 dark:text-amber-400';
+  if (p >= 10) return 'text-orange-700 dark:text-orange-400';
   return 'text-rose-600 dark:text-rose-400';
 }
 
-export function EquipmentManagement() {
-  const { toast } = useToast();
+export function EquipmentManagement({
+  facilities = [],
+  equipment = [],
+}: {
+  facilities?: Facility[];
+  equipment?: EquipmentRow[];
+}) {
   const isMobile = useIsMobile();
+
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingEquipment, setEditingEquipment] = useState<
-    (typeof equipment)[0] | null
-  >(null);
-  const [deletingEquipment, setDeletingEquipment] = useState<
-    (typeof equipment)[0] | null
-  >(null);
+  const [editingEquipment, setEditingEquipment] = useState<EquipmentRow | null>(
+    null
+  );
+  const [deletingEquipment, setDeletingEquipment] =
+    useState<EquipmentRow | null>(null);
 
   const [formData, setFormData] = useState({
+    id: '' as string | undefined,
     name: '',
     facilityId: '',
     qtyTotal: 10,
     qtyAvailable: 10,
   });
 
+  // Server actions via React.useActionState
+  const [upsertState, upsertDispatch] = useActionState<ActionResult, FormData>(
+    upsertEquipment,
+    { ok: true }
+  );
+  const [deleteState, deleteDispatch] = useActionState<ActionResult, FormData>(
+    deleteEquipmentAction,
+    { ok: true }
+  );
+
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
+  const [lastAction, setLastAction] = useState<null | 'upsert' | 'delete'>(
+    null
+  );
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      errors.name = 'Equipment name is required';
-    }
-
-    if (!formData.facilityId) {
+    if (!formData.name.trim()) errors.name = 'Equipment name is required';
+    if (!formData.facilityId)
       errors.facilityId = 'Facility selection is required';
-    }
-
-    if (formData.qtyTotal <= 0) {
+    if (formData.qtyTotal <= 0)
       errors.qtyTotal = 'Total quantity must be greater than 0';
-    }
-
-    if (formData.qtyAvailable < 0) {
+    if (formData.qtyAvailable < 0)
       errors.qtyAvailable = 'Available quantity cannot be negative';
-    }
-
     if (formData.qtyAvailable > formData.qtyTotal) {
       errors.qtyAvailable = 'Available quantity cannot exceed total quantity';
     }
-
     return errors;
   };
 
-  const handleAdd = () => {
-    const errors = validateForm();
-    setValidationErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      const missingFields = Object.values(errors).join(', ');
-      toast({
-        title: 'Validation Failed',
-        description: `Please fix the following errors: ${missingFields}`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const newEquipment = {
-      id: `eq${Date.now()}`,
-      name: formData.name,
-      facilityId: formData.facilityId,
-      qtyTotal: formData.qtyTotal,
-      qtyAvailable: formData.qtyAvailable,
-    };
-
-    equipment.push(newEquipment);
-
-    toast({
-      title: 'Equipment Added',
-      description: `${newEquipment.name} has been added to inventory.`,
-    });
-
-    setIsAddOpen(false);
-    resetForm();
-    setValidationErrors({});
-  };
-
-  const handleEdit = () => {
-    if (!editingEquipment) return;
-
-    const errors = validateForm();
-    setValidationErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      const missingFields = Object.values(errors).join(', ');
-      toast({
-        title: 'Validation Failed',
-        description: `Please fix the following errors: ${missingFields}`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const eq = equipment.find((e) => e.id === editingEquipment.id);
-    if (eq) {
-      eq.name = formData.name;
-      eq.facilityId = formData.facilityId;
-      eq.qtyTotal = formData.qtyTotal;
-      eq.qtyAvailable = formData.qtyAvailable;
-
-      toast({
-        title: 'Equipment Updated',
-        description: `${eq.name} has been updated successfully.`,
-      });
-    }
-
-    setEditingEquipment(null);
-    resetForm();
-    setValidationErrors({});
-  };
-
-  const handleDelete = () => {
-    if (!deletingEquipment) return;
-
-    const index = equipment.findIndex((e) => e.id === deletingEquipment.id);
-    if (index !== -1) {
-      equipment.splice(index, 1);
-      toast({
-        title: 'Equipment Deleted',
-        description: `${deletingEquipment.name} has been removed from inventory.`,
-        variant: 'destructive',
-      });
-    }
-
-    setDeletingEquipment(null);
-  };
-
-  const resetForm = () => {
+  const resetForm = () =>
     setFormData({
+      id: undefined,
       name: '',
       facilityId: '',
       qtyTotal: 10,
       qtyAvailable: 10,
     });
-  };
 
-  const openEdit = (eq: (typeof equipment)[0]) => {
+  const openEdit = (eq: EquipmentRow) => {
     setFormData({
+      id: eq.id,
       name: eq.name,
       facilityId: eq.facilityId,
       qtyTotal: eq.qtyTotal,
@@ -211,7 +149,64 @@ export function EquipmentManagement() {
     });
     setEditingEquipment(eq);
     setValidationErrors({});
+    setIsAddOpen(true); // open dialog in edit mode
   };
+
+  const submitUpsert = () => {
+    const errors = validateForm();
+    setValidationErrors(errors);
+    if (Object.keys(errors).length) {
+      notify.error(Object.values(errors).join(', '));
+      return;
+    }
+    const fd = new FormData();
+    if (formData.id) fd.set('id', formData.id);
+    fd.set('name', formData.name);
+    fd.set('facilityId', formData.facilityId);
+    fd.set('qtyTotal', String(formData.qtyTotal));
+    fd.set('qtyAvailable', String(formData.qtyAvailable));
+
+    setLastAction('upsert');
+    upsertDispatch(fd); // returns void; result arrives via upsertState
+  };
+
+  const handleDelete = () => {
+    if (!deletingEquipment) return;
+    const fd = new FormData();
+    fd.set('id', deletingEquipment.id);
+    setLastAction('delete');
+    deleteDispatch(fd); // returns void; result arrives via deleteState
+  };
+
+  // React to action results
+  useEffect(() => {
+    if (lastAction !== 'upsert') return;
+    if (!upsertState) return;
+
+    if (upsertState.ok) {
+      notify.success(formData.id ? 'Equipment updated' : 'Equipment added');
+      setIsAddOpen(false);
+      setEditingEquipment(null);
+      resetForm();
+    } else {
+      notify.error(upsertState.message ?? 'Could not save');
+    }
+    setLastAction(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upsertState]);
+
+  useEffect(() => {
+    if (lastAction !== 'delete') return;
+    if (!deleteState) return;
+
+    if (deleteState.ok) {
+      notify.success('Equipment deleted');
+    } else {
+      notify.error(deleteState.message ?? 'Delete failed');
+    }
+    setDeletingEquipment(null);
+    setLastAction(null);
+  }, [deleteState, lastAction]);
 
   return (
     <div className="space-y-6">
@@ -222,25 +217,30 @@ export function EquipmentManagement() {
             setIsAddOpen(open);
             if (!open) {
               setValidationErrors({});
+              setEditingEquipment(null);
               resetForm();
             }
           }}
         >
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={() => setIsAddOpen(true)}>
               <PlusIcon className="h-4 w-4 mr-2" />
               Add Equipment
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add New Equipment</DialogTitle>
+              <DialogTitle>
+                {editingEquipment ? 'Edit Equipment' : 'Add New Equipment'}
+              </DialogTitle>
             </DialogHeader>
             <EquipmentForm
               formData={formData}
               setFormData={setFormData}
-              onSubmit={handleAdd}
+              onSubmit={submitUpsert}
               validationErrors={validationErrors}
+              facilities={facilities}
+              isEdit={!!editingEquipment}
             />
           </DialogContent>
         </Dialog>
@@ -251,7 +251,6 @@ export function EquipmentManagement() {
           {equipment.map((eq) => {
             const facility = facilities.find((f) => f.id === eq.facilityId);
             const stockPercent = (eq.qtyAvailable / eq.qtyTotal) * 100;
-
             return (
               <Card key={eq.id} className="overflow-hidden">
                 <CardContent className="p-4 space-y-4">
@@ -422,31 +421,30 @@ export function EquipmentManagement() {
         </Table>
       )}
 
-      {editingEquipment && (
-        <Dialog
-          open={!!editingEquipment}
-          onOpenChange={(open) => {
-            if (!open) {
-              setEditingEquipment(null);
-              setValidationErrors({});
-              resetForm();
-            }
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Equipment</DialogTitle>
-            </DialogHeader>
-            <EquipmentForm
-              formData={formData}
-              setFormData={setFormData}
-              onSubmit={handleEdit}
-              isEdit
-              validationErrors={validationErrors}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog
+        open={!!editingEquipment}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingEquipment(null);
+            setValidationErrors({});
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Equipment</DialogTitle>
+          </DialogHeader>
+          <EquipmentForm
+            formData={formData}
+            setFormData={setFormData}
+            onSubmit={submitUpsert}
+            isEdit
+            validationErrors={validationErrors}
+            facilities={facilities}
+          />
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={!!deletingEquipment}
@@ -472,6 +470,18 @@ export function EquipmentManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Optional inline error surfaces */}
+      {!upsertState.ok && (
+        <p className="text-sm text-red-600">
+          {upsertState.message ?? 'Action failed.'}
+        </p>
+      )}
+      {!deleteState.ok && (
+        <p className="text-sm text-red-600">
+          {deleteState.message ?? 'Delete failed.'}
+        </p>
+      )}
     </div>
   );
 }
@@ -482,12 +492,14 @@ function EquipmentForm({
   onSubmit,
   isEdit = false,
   validationErrors = {},
+  facilities,
 }: {
   formData: any;
   setFormData: any;
   onSubmit: () => void;
   isEdit?: boolean;
   validationErrors?: Record<string, string>;
+  facilities: Facility[];
 }) {
   return (
     <div className="space-y-6 py-4">
@@ -557,7 +569,7 @@ function EquipmentForm({
             onChange={(e) =>
               setFormData({
                 ...formData,
-                qtyTotal: Number.parseInt(e.target.value),
+                qtyTotal: Number.parseInt(e.target.value || '0', 10),
               })
             }
             min={1}
@@ -586,7 +598,7 @@ function EquipmentForm({
             onChange={(e) =>
               setFormData({
                 ...formData,
-                qtyAvailable: Number.parseInt(e.target.value),
+                qtyAvailable: Number.parseInt(e.target.value || '0', 10),
               })
             }
             min={0}
