@@ -1,15 +1,10 @@
 'use client';
 
+import { useEffect, useState, useMemo } from 'react';
+import { createBrowserClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-
-import { equipment, facilities } from '@/lib/data';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -17,9 +12,16 @@ import { PackageIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
-function getAvailabilityVariant(
-  percent: number
-): 'success' | 'warning' | 'danger' | 'critical' {
+type Facility = { id: string; name: string };
+type EquipmentRow = {
+  id: string;
+  name: string;
+  facilityId: string | null;
+  qtyTotal: number;
+  qtyAvailable: number;
+};
+
+function getAvailabilityVariant(percent: number): 'success' | 'warning' | 'danger' | 'critical' {
   if (percent >= 70) return 'success';
   if (percent >= 40) return 'warning';
   if (percent >= 10) return 'danger';
@@ -33,7 +35,62 @@ function getAvailabilityTextColor(percent: number): string {
   return 'text-rose-600 dark:text-rose-400';
 }
 
-export function InventoryList() {
+export function InventoryList({
+  facilities = [],
+  equipment = [],
+}: {
+  facilities?: Facility[];
+  equipment?: EquipmentRow[];
+}) {
+  const [rows, setRows] = useState<EquipmentRow[]>(equipment);
+
+  // Quick lookup for facility names
+  const facilityNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const f of facilities) map.set(f.id, f.name);
+    return map;
+  }, [facilities]);
+
+  // Subscribe to Supabase Realtime for live updates
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    const channel = supabase
+      .channel('realtime-equipment')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'Equipment' },
+        (payload) => {
+          const newRec = payload.new as EquipmentRow | undefined;
+          const oldRec = payload.old as EquipmentRow | undefined;
+
+          setRows((prev) => {
+            let updated = [...prev];
+            switch (payload.eventType) {
+              case 'INSERT':
+                if (!newRec) break;
+                updated.push(newRec);
+                break;
+              case 'UPDATE':
+                if (!newRec) break;
+                updated = updated.map((r) => (r.id === newRec.id ? newRec : r));
+                break;
+              case 'DELETE':
+                if (!oldRec) break;
+                updated = updated.filter((r) => r.id !== oldRec.id);
+                break;
+            }
+            // Keep sorted alphabetically
+            return updated.sort((a, b) => a.name.localeCompare(b.name));
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   return (
     <>
       {/* Desktop Table View */}
@@ -49,9 +106,11 @@ export function InventoryList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {equipment.map((eq) => {
-              const facility = facilities.find((f) => f.id === eq.facilityId);
-              const availabilityPercent = (eq.qtyAvailable / eq.qtyTotal) * 100;
+            {rows.map((eq) => {
+              const facilityName = eq.facilityId
+                ? facilityNameById.get(eq.facilityId) ?? '—'
+                : '—';
+              const percent = eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
 
               return (
                 <TableRow key={eq.id}>
@@ -61,7 +120,7 @@ export function InventoryList() {
                       <span className="font-medium">{eq.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{facility?.name}</TableCell>
+                  <TableCell>{facilityName}</TableCell>
                   <TableCell>
                     <Badge
                       variant={
@@ -79,17 +138,17 @@ export function InventoryList() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Progress
-                        value={availabilityPercent}
-                        variant={getAvailabilityVariant(availabilityPercent)}
+                        value={percent}
+                        variant={getAvailabilityVariant(percent)}
                         className="w-24"
                       />
                       <span
                         className={cn(
                           'text-sm font-medium',
-                          getAvailabilityTextColor(availabilityPercent)
+                          getAvailabilityTextColor(percent)
                         )}
                       >
-                        {Math.round(availabilityPercent)}%
+                        {Math.round(percent)}%
                       </span>
                     </div>
                   </TableCell>
@@ -102,9 +161,11 @@ export function InventoryList() {
 
       {/* Mobile Card View */}
       <div className="md:hidden space-y-4">
-        {equipment.map((eq) => {
-          const facility = facilities.find((f) => f.id === eq.facilityId);
-          const availabilityPercent = (eq.qtyAvailable / eq.qtyTotal) * 100;
+        {rows.map((eq) => {
+          const facilityName = eq.facilityId
+            ? facilityNameById.get(eq.facilityId) ?? '—'
+            : '—';
+          const percent = eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
 
           return (
             <Card key={eq.id} className="p-4">
@@ -115,9 +176,7 @@ export function InventoryList() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-bold">{eq.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {facility?.name}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{facilityName}</p>
                   </div>
                 </div>
 
@@ -150,15 +209,15 @@ export function InventoryList() {
                     <span
                       className={cn(
                         'font-medium',
-                        getAvailabilityTextColor(availabilityPercent)
+                        getAvailabilityTextColor(percent)
                       )}
                     >
-                      {Math.round(availabilityPercent)}%
+                      {Math.round(percent)}%
                     </span>
                   </div>
                   <Progress
-                    value={availabilityPercent}
-                    variant={getAvailabilityVariant(availabilityPercent)}
+                    value={percent}
+                    variant={getAvailabilityVariant(percent)}
                   />
                 </div>
               </div>

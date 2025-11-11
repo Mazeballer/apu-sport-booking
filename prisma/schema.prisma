@@ -7,9 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// * ===========================
-/// * Core
-/// * ===========================
+/// ===========================
+/// Core
+/// ===========================
 model User {
   id        String             @id @default(uuid())
   email     String             @unique
@@ -23,91 +23,66 @@ model User {
   pushSubs  PushSubscription[]
 }
 
-/// * ===========================
-/// * Facility Management
-/// * ===========================
+/// ===========================
+/// Facility Management
+/// ===========================
 model Facility {
-  id        String             @id @default(uuid())
-  name      String
-  type      String
-  location  String
-  rules     String?
-  photos    String[]
-  active    Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  bookings  Booking[]
+  id             String      @id @default(uuid())
+  name           String
+  type           String                      // Main sport type
+  location       String
+  locationType   String      @default("Indoor")
+  description    String?
+  capacity       Int         @default(0)
+  openTime       String?                     // e.g. "07:00"
+  closeTime      String?                     // e.g. "22:00"
+  rules          String?                     // stored as newline-separated
+  photos         String[]                    // [facilityImage, layoutImage]
+  active         Boolean     @default(true)
+  isMultiSport   Boolean     @default(false)
+  sharedSports   String[]    @default([])     // if isMultiSport = true
+  numberOfCourts Int         @default(1)
+  createdAt      DateTime    @default(now())
+
   courts    Court[]
+  bookings  Booking[]
   equipment Equipment[]
-  schedules FacilitySchedule[]
 }
 
-model FacilitySchedule {
-  id         String   @id @default(uuid())
-  facilityId String
-  dayOfWeek  Int
-  openTime   String
-  closeTime  String
-  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-
-  @@index([facilityId, dayOfWeek])
-}
-
-/// * ===========================
-/// * Spaces (Courts) & Sports
-/// * ===========================
+/// ===========================
+/// Spaces (Courts)
+/// ===========================
 model Court {
-  id              String       @id @default(uuid())
-  facilityId      String
-  name            String
-  conflictGroupId String?
-  active          Boolean      @default(true)
-  bookings        Booking[]
-  facility        Facility     @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  supportedSports CourtSport[]
+  id         String    @id @default(uuid())
+  facilityId String
+  name       String
+  active     Boolean   @default(true)
+
+  facility   Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  bookings   Booking[]
 
   @@unique([facilityId, name])
   @@index([facilityId])
-  @@index([conflictGroupId])
-  @@index([active])
 }
 
-model Sport {
-  id                 String       @id @default(uuid())
-  name               String       @unique
-  minDurationMinutes Int          @default(60)
-  maxDurationMinutes Int          @default(120)
-  createdAt          DateTime     @default(now())
-  bookings           Booking[]
-  courts             CourtSport[]
-}
-
-model CourtSport {
-  courtId String
-  sportId String
-  court   Court  @relation(fields: [courtId], references: [id], onDelete: Cascade)
-  sport   Sport  @relation(fields: [sportId], references: [id], onDelete: Cascade)
-
-  @@id([courtId, sportId])
-}
-
-/// * ===========================
-/// * Bookings
-/// * ===========================
+/// ===========================
+/// Bookings
+/// ===========================
 model Booking {
-  id                String             @id @default(uuid())
-  userId            String
-  facilityId        String
-  courtId           String
-  sportId           String
-  start             DateTime           @db.Timestamptz(6)
-  end               DateTime           @db.Timestamptz(6)
-  status            BookingStatus      @default(confirmed)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  court             Court              @relation(fields: [courtId], references: [id], onDelete: Cascade)
-  facility          Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  sport             Sport              @relation(fields: [sportId], references: [id])
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String      @id @default(uuid())
+  userId     String
+  facilityId String
+  courtId    String
+  sportName  String?                     // e.g. "Basketball" or "Futsal"
+  start      DateTime     @db.Timestamptz(6)
+  end        DateTime     @db.Timestamptz(6)
+  status     BookingStatus @default(confirmed)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  facility   Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  court      Court     @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   equipmentRequests EquipmentRequest[]
 
   @@unique([courtId, start, end])
@@ -116,17 +91,18 @@ model Booking {
   @@index([userId, start])
 }
 
-/// * ===========================
-/// * Equipment & Requests
-/// * ===========================
+/// ===========================
+/// Equipment & Requests
+/// ===========================
 model Equipment {
-  id           String                 @id @default(uuid())
+  id           String   @id @default(uuid())
   facilityId   String
   name         String
   qtyTotal     Int
   qtyAvailable Int
   notes        String?
-  facility     Facility               @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  facility     Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   requestItems EquipmentRequestItem[]
 
   @@index([facilityId, name])
@@ -140,6 +116,7 @@ model EquipmentRequest {
   decidedAt DateTime?
   note      String?
   createdAt DateTime               @default(now())
+
   booking   Booking                @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   decider   User?                  @relation("Decider", fields: [decidedBy], references: [id])
   items     EquipmentRequestItem[]
@@ -152,15 +129,16 @@ model EquipmentRequestItem {
   requestId   String
   equipmentId String
   qty         Int
+
   equipment   Equipment        @relation(fields: [equipmentId], references: [id])
   request     EquipmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@unique([requestId, equipmentId])
 }
 
-/// * ===========================
-/// * PWA Push Subscriptions
-/// * ===========================
+/// ===========================
+/// PWA Push Subscriptions
+/// ===========================
 model PushSubscription {
   id        String   @id @default(uuid())
   userId    String
@@ -168,14 +146,15 @@ model PushSubscription {
   p256dh    String
   auth      String
   createdAt DateTime @default(now())
+
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-/// * ===========================
-/// * Enums
-/// * ===========================
+/// ===========================
+/// Enums
+/// ===========================
 enum Role {
   student
   staff

@@ -1,24 +1,23 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useActionState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useEffect, useState, startTransition, useActionState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -26,11 +25,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { PlusIcon, EditIcon, PackageIcon, TrashIcon } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { PlusIcon, EditIcon, PackageIcon, TrashIcon } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,15 +39,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { Card, CardContent } from '@/components/ui/card';
+} from "@/components/ui/alert-dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   upsertEquipment,
   deleteEquipmentAction,
   type ActionResult,
-} from '@/app/(protected)/admin/inventory/actions';
-import { notify } from '@/lib/toast';
+} from "@/app/(protected)/admin/inventory/actions";
+import { notify } from "@/lib/toast";
 
 type Facility = { id: string; name: string };
 type EquipmentRow = {
@@ -61,17 +60,17 @@ type EquipmentRow = {
 
 function getAvailabilityVariant(
   p: number
-): 'success' | 'warning' | 'danger' | 'critical' {
-  if (p >= 70) return 'success';
-  if (p >= 40) return 'warning';
-  if (p >= 10) return 'danger';
-  return 'critical';
+): "success" | "warning" | "danger" | "critical" {
+  if (p >= 70) return "success";
+  if (p >= 40) return "warning";
+  if (p >= 10) return "danger";
+  return "critical";
 }
 function getAvailabilityTextColor(p: number): string {
-  if (p >= 70) return 'text-emerald-700 dark:text-emerald-400';
-  if (p >= 40) return 'text-amber-700 dark:text-amber-400';
-  if (p >= 10) return 'text-orange-700 dark:text-orange-400';
-  return 'text-rose-600 dark:text-rose-400';
+  if (p >= 70) return "text-emerald-700 dark:text-emerald-400";
+  if (p >= 40) return "text-amber-700 dark:text-amber-400";
+  if (p >= 10) return "text-orange-700 dark:text-orange-400";
+  return "text-rose-600 dark:text-rose-400";
 }
 
 export function EquipmentManagement({
@@ -91,9 +90,9 @@ export function EquipmentManagement({
     useState<EquipmentRow | null>(null);
 
   const [formData, setFormData] = useState({
-    id: '' as string | undefined,
-    name: '',
-    facilityId: '',
+    id: "" as string | undefined,
+    name: "",
+    facilityId: "",
     qtyTotal: 10,
     qtyAvailable: 10,
   });
@@ -111,21 +110,21 @@ export function EquipmentManagement({
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
-  const [lastAction, setLastAction] = useState<null | 'upsert' | 'delete'>(
+  const [lastAction, setLastAction] = useState<null | "upsert" | "delete">(
     null
   );
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = 'Equipment name is required';
+    if (!formData.name.trim()) errors.name = "Equipment name is required";
     if (!formData.facilityId)
-      errors.facilityId = 'Facility selection is required';
+      errors.facilityId = "Facility selection is required";
     if (formData.qtyTotal <= 0)
-      errors.qtyTotal = 'Total quantity must be greater than 0';
+      errors.qtyTotal = "Total quantity must be greater than 0";
     if (formData.qtyAvailable < 0)
-      errors.qtyAvailable = 'Available quantity cannot be negative';
+      errors.qtyAvailable = "Available quantity cannot be negative";
     if (formData.qtyAvailable > formData.qtyTotal) {
-      errors.qtyAvailable = 'Available quantity cannot exceed total quantity';
+      errors.qtyAvailable = "Available quantity cannot exceed total quantity";
     }
     return errors;
   };
@@ -133,8 +132,8 @@ export function EquipmentManagement({
   const resetForm = () =>
     setFormData({
       id: undefined,
-      name: '',
-      facilityId: '',
+      name: "",
+      facilityId: "",
       qtyTotal: 10,
       qtyAvailable: 10,
     });
@@ -156,53 +155,60 @@ export function EquipmentManagement({
     const errors = validateForm();
     setValidationErrors(errors);
     if (Object.keys(errors).length) {
-      notify.error(Object.values(errors).join(', '));
+      notify.error(Object.values(errors).join(", "));
       return;
     }
-    const fd = new FormData();
-    if (formData.id) fd.set('id', formData.id);
-    fd.set('name', formData.name);
-    fd.set('facilityId', formData.facilityId);
-    fd.set('qtyTotal', String(formData.qtyTotal));
-    fd.set('qtyAvailable', String(formData.qtyAvailable));
 
-    setLastAction('upsert');
-    upsertDispatch(fd); // returns void; result arrives via upsertState
+    const fd = new FormData();
+    if (formData.id) fd.set("id", formData.id);
+    fd.set("name", formData.name);
+    fd.set("facilityId", formData.facilityId);
+    fd.set("qtyTotal", String(formData.qtyTotal));
+    fd.set("qtyAvailable", String(formData.qtyAvailable));
+
+    setLastAction("upsert");
+    startTransition(() => {
+      upsertDispatch(fd);
+    });
   };
 
   const handleDelete = () => {
     if (!deletingEquipment) return;
+
     const fd = new FormData();
-    fd.set('id', deletingEquipment.id);
-    setLastAction('delete');
-    deleteDispatch(fd); // returns void; result arrives via deleteState
+    fd.set("id", deletingEquipment.id);
+
+    setLastAction("delete");
+    startTransition(() => {
+      deleteDispatch(fd);
+    });
   };
 
   // React to action results
   useEffect(() => {
-    if (lastAction !== 'upsert') return;
+    if (lastAction !== "upsert") return;
     if (!upsertState) return;
 
     if (upsertState.ok) {
-      notify.success(formData.id ? 'Equipment updated' : 'Equipment added');
+      notify.success(formData.id ? "Equipment updated" : "Equipment added");
       setIsAddOpen(false);
       setEditingEquipment(null);
       resetForm();
     } else {
-      notify.error(upsertState.message ?? 'Could not save');
+      notify.error(upsertState.message ?? "Could not save");
     }
     setLastAction(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upsertState]);
 
   useEffect(() => {
-    if (lastAction !== 'delete') return;
+    if (lastAction !== "delete") return;
     if (!deleteState) return;
 
     if (deleteState.ok) {
-      notify.success('Equipment deleted');
+      notify.success("Equipment deleted");
     } else {
-      notify.error(deleteState.message ?? 'Delete failed');
+      notify.error(deleteState.message ?? "Delete failed");
     }
     setDeletingEquipment(null);
     setLastAction(null);
@@ -231,7 +237,7 @@ export function EquipmentManagement({
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {editingEquipment ? 'Edit Equipment' : 'Add New Equipment'}
+                {editingEquipment ? "Edit Equipment" : "Add New Equipment"}
               </DialogTitle>
             </DialogHeader>
             <EquipmentForm
@@ -272,10 +278,10 @@ export function EquipmentManagement({
                       <Badge
                         variant={
                           eq.qtyAvailable === 0
-                            ? 'destructive'
+                            ? "destructive"
                             : eq.qtyAvailable < 3
-                            ? 'secondary'
-                            : 'default'
+                            ? "secondary"
+                            : "default"
                         }
                         className="mt-1"
                       >
@@ -302,7 +308,7 @@ export function EquipmentManagement({
                       />
                       <span
                         className={cn(
-                          'text-sm font-medium',
+                          "text-sm font-medium",
                           getAvailabilityTextColor(stockPercent)
                         )}
                       >
@@ -366,10 +372,10 @@ export function EquipmentManagement({
                     <Badge
                       variant={
                         eq.qtyAvailable === 0
-                          ? 'destructive'
+                          ? "destructive"
                           : eq.qtyAvailable < 3
-                          ? 'secondary'
-                          : 'default'
+                          ? "secondary"
+                          : "default"
                       }
                     >
                       {eq.qtyAvailable}
@@ -385,7 +391,7 @@ export function EquipmentManagement({
                       />
                       <span
                         className={cn(
-                          'text-sm font-medium',
+                          "text-sm font-medium",
                           getAvailabilityTextColor(stockPercent)
                         )}
                       >
@@ -454,8 +460,8 @@ export function EquipmentManagement({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete{' '}
-              <span className="font-semibold">{deletingEquipment?.name}</span>{' '}
+              This action cannot be undone. This will permanently delete{" "}
+              <span className="font-semibold">{deletingEquipment?.name}</span>{" "}
               from the equipment inventory.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -474,12 +480,12 @@ export function EquipmentManagement({
       {/* Optional inline error surfaces */}
       {!upsertState.ok && (
         <p className="text-sm text-red-600">
-          {upsertState.message ?? 'Action failed.'}
+          {upsertState.message ?? "Action failed."}
         </p>
       )}
       {!deleteState.ok && (
         <p className="text-sm text-red-600">
-          {deleteState.message ?? 'Delete failed.'}
+          {deleteState.message ?? "Delete failed."}
         </p>
       )}
     </div>
@@ -513,7 +519,7 @@ function EquipmentForm({
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Basketball"
           className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
-            validationErrors.name ? 'border-destructive' : ''
+            validationErrors.name ? "border-destructive" : ""
           }`}
         />
         {validationErrors.name && (
@@ -534,7 +540,7 @@ function EquipmentForm({
           <SelectTrigger
             id="eq-facility"
             className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
-              validationErrors.facilityId ? 'border-destructive' : ''
+              validationErrors.facilityId ? "border-destructive" : ""
             }`}
           >
             <SelectValue placeholder="Select facility" />
@@ -569,12 +575,12 @@ function EquipmentForm({
             onChange={(e) =>
               setFormData({
                 ...formData,
-                qtyTotal: Number.parseInt(e.target.value || '0', 10),
+                qtyTotal: Number.parseInt(e.target.value || "0", 10),
               })
             }
             min={1}
             className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
-              validationErrors.qtyTotal ? 'border-destructive' : ''
+              validationErrors.qtyTotal ? "border-destructive" : ""
             }`}
           />
           {validationErrors.qtyTotal && (
@@ -598,13 +604,13 @@ function EquipmentForm({
             onChange={(e) =>
               setFormData({
                 ...formData,
-                qtyAvailable: Number.parseInt(e.target.value || '0', 10),
+                qtyAvailable: Number.parseInt(e.target.value || "0", 10),
               })
             }
             min={0}
             max={formData.qtyTotal}
             className={`border-3 border-primary/20 focus:border-primary shadow-sm ${
-              validationErrors.qtyAvailable ? 'border-destructive' : ''
+              validationErrors.qtyAvailable ? "border-destructive" : ""
             }`}
           />
           {validationErrors.qtyAvailable && (
@@ -616,7 +622,7 @@ function EquipmentForm({
       </div>
 
       <Button onClick={onSubmit} className="w-full">
-        {isEdit ? 'Update Equipment' : 'Add Equipment'}
+        {isEdit ? "Update Equipment" : "Add Equipment"}
       </Button>
     </div>
   );

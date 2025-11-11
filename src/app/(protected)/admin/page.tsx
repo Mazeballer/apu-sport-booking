@@ -1,16 +1,16 @@
-import { redirect } from 'next/navigation';
-import { createServerSupabase } from '@/lib/supabase/server';
-import { prisma } from '@/lib/prisma';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FacilitiesManagement } from '@/components/admin/facilities-management';
-import { OperatingHoursManagement } from '@/components/admin/operating-hours-management';
-import { EquipmentManagement } from '@/components/admin/equipment-management';
-import { EquipmentStatus } from '@/components/admin/equipment-status';
-import { AnalyticsDashboard } from '@/components/admin/analytics-dashboard';
-import { UserManagement } from '@/components/admin/user-management';
-import { Navbar } from '@/components/navbar';
-import { Prisma, Role as PrismaRole } from '@prisma/client';
+import { redirect } from "next/navigation";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FacilitiesManagement } from "@/components/admin/facilities-management";
+import { OperatingHoursManagement } from "@/components/admin/operating-hours-management";
+import { EquipmentManagement } from "@/components/admin/equipment-management";
+import { EquipmentStatus } from "@/components/admin/equipment-status";
+import { AnalyticsDashboard } from "@/components/admin/analytics-dashboard";
+import { UserManagement } from "@/components/admin/user-management";
+import { Navbar } from "@/components/navbar";
+import { Prisma, Role as PrismaRole } from "@prisma/client";
 import {
   BuildingIcon,
   ClockIcon,
@@ -18,19 +18,27 @@ import {
   TrendingUpIcon,
   UsersIcon,
   WrenchIcon,
-} from 'lucide-react';
+} from "lucide-react";
+
+// IMPORTANT: these should match your lib/facility-types.ts
+import type {
+  Facility as UiFacility,
+  SportType,
+  LocationType,
+  AvailableEquipment,
+} from "@/lib/facility-types";
 
 export default async function AdminPage({
   searchParams,
 }: {
   searchParams?: Promise<{ page?: string; query?: string }>;
 }) {
-  // 1) Server-side auth (session) + role gate (admin only)
+  // 1) Auth + role gate
   const supabase = await createServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect('/login?redirect=/admin');
+  if (!user) redirect("/login?redirect=/admin");
 
   const me =
     (await prisma.user.findUnique({
@@ -44,21 +52,20 @@ export default async function AdminPage({
         })
       : null);
 
-  if (!me || me.role !== 'admin') {
-    redirect('/'); // not authorized
+  if (!me || me.role !== "admin") {
+    redirect("/");
   }
 
-  // 2) Preload users for the Users tab (SSR)
+  // 2) Users tab data (pagination + search)
   const params = await searchParams;
   const pageSize = 20;
   const initialPage = Math.max(1, Number(params?.page || 1));
-  const initialQuery = (params?.query || '').trim();
+  const initialQuery = (params?.query || "").trim();
 
   let where: Prisma.UserWhereInput | undefined;
 
   if (initialQuery.length > 0) {
-    // if the query literally matches a role, allow role filter too
-    const roleFromQuery = (['admin', 'staff', 'student'] as const).find(
+    const roleFromQuery = (["admin", "staff", "student"] as const).find(
       (r) => r === initialQuery.toLowerCase()
     ) as PrismaRole | undefined;
 
@@ -81,14 +88,12 @@ export default async function AdminPage({
           : []),
       ],
     };
-  } else {
-    where = undefined;
   }
 
   const [initialUsers, initialTotal] = await Promise.all([
     prisma.user.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       skip: (initialPage - 1) * pageSize,
       take: pageSize,
       select: {
@@ -102,13 +107,86 @@ export default async function AdminPage({
     prisma.user.count({ where }),
   ]);
 
-  // Make dates serializable for client props
   const initialUsersSerializable = initialUsers.map((u) => ({
     ...u,
     createdAt: u.createdAt.toISOString(),
   }));
 
-  // 3) Render
+  // 3) Facilities + equipment (for Facilities + Inventory tabs)
+  const facilitiesFromDb = await prisma.facility.findMany({
+    include: { equipment: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // FacilitiesManagement expects UiFacility[]
+  const initialFacilities: UiFacility[] = facilitiesFromDb.map((f) => {
+    const sportType = f.type as SportType;
+    const locationType = (f.locationType ?? "Indoor") as LocationType;
+
+    const rulesArray = f.rules
+      ? f.rules
+          .split("\n")
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [];
+
+    const mainImage =
+      f.photos[0] ??
+      `/placeholder.svg?height=400&width=600&query=${encodeURIComponent(
+        f.type
+      )} facility`;
+
+    const layoutImage =
+      f.photos[1] ??
+      `/placeholder.svg?height=400&width=600&query=${encodeURIComponent(
+        f.type
+      )} court layout`;
+
+    // 👇 this is the important part for the Equipment count on the card
+    const availableEquipment: AvailableEquipment[] = f.equipment.map((eq) => ({
+      equipmentId: eq.id,
+      quantity: eq.qtyAvailable,
+    }));
+
+    return {
+      id: f.id,
+      name: f.name,
+      type: sportType,
+      location: f.location,
+      locationType,
+      description: f.description ?? "",
+      image: mainImage,
+      layoutImage,
+      capacity: f.capacity ?? 0,
+      rules: rulesArray,
+      operatingHours: {
+        start: f.openTime ?? "08:00",
+        end: f.closeTime ?? "22:00",
+      },
+      courts: [], // you’ll fill this later when you wire real courts
+      status: f.active ? "active" : "inactive",
+      isMultiSport: f.isMultiSport ?? false,
+      availableEquipment,
+    };
+  });
+
+  // EquipmentManagement expects a simple facilities + equipment list
+  const facilitiesForInventory = facilitiesFromDb.map((f) => ({
+    id: f.id,
+    name: f.name,
+  }));
+
+  const equipmentForInventory = facilitiesFromDb.flatMap((f) =>
+    f.equipment.map((eq) => ({
+      id: eq.id,
+      name: eq.name,
+      facilityId: eq.facilityId,
+      qtyTotal: eq.qtyTotal,
+      qtyAvailable: eq.qtyAvailable,
+    }))
+  );
+
+  // 4) Render
   return (
     <>
       <Navbar />
@@ -185,7 +263,7 @@ export default async function AdminPage({
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <FacilitiesManagement />
+                  <FacilitiesManagement initialFacilities={initialFacilities} />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -199,7 +277,7 @@ export default async function AdminPage({
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <OperatingHoursManagement />
+                  <OperatingHoursManagement facilities={facilitiesFromDb}/>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -213,7 +291,10 @@ export default async function AdminPage({
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <EquipmentManagement />
+                  <EquipmentManagement
+                    facilities={facilitiesForInventory}
+                    equipment={equipmentForInventory}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
