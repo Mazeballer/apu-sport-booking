@@ -1,22 +1,22 @@
-'use client';
+"use client";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Card } from '@/components/ui/card';
-import type { SportType, LocationType } from '@/lib/data';
-import { FilterIcon } from 'lucide-react';
+} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
+import type { SportType, LocationType } from "@/lib/facility-types";
+import { FilterIcon } from "lucide-react";
 
 interface FacilityFiltersProps {
-  sportType: SportType | 'all';
-  locationType: LocationType | 'all';
-  onSportTypeChange: (type: SportType | 'all') => void;
-  onLocationTypeChange: (type: LocationType | 'all') => void;
+  sportType: "all" | SportType;
+  locationType: "all" | LocationType;
+  onSportTypeChange: (type: "all" | SportType) => void;
+  onLocationTypeChange: (type: "all" | LocationType) => void;
 }
 
 export function FacilityFilters({
@@ -26,11 +26,11 @@ export function FacilityFilters({
   onLocationTypeChange,
 }: FacilityFiltersProps) {
   const handleReset = () => {
-    onSportTypeChange('all');
-    onLocationTypeChange('all');
+    onSportTypeChange("all");
+    onLocationTypeChange("all");
   };
 
-  const hasActiveFilters = sportType !== 'all' || locationType !== 'all';
+  const hasActiveFilters = sportType !== "all" || locationType !== "all";
 
   return (
     <Card className="mb-8 p-4 shadow-md bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -44,7 +44,7 @@ export function FacilityFilters({
           <Select
             value={sportType}
             onValueChange={(value) =>
-              onSportTypeChange(value as SportType | 'all')
+              onSportTypeChange(value as "all" | SportType)
             }
           >
             <SelectTrigger className="w-full sm:w-[180px] border-3 border-primary/20 focus:border-primary shadow-sm">
@@ -64,7 +64,7 @@ export function FacilityFilters({
           <Select
             value={locationType}
             onValueChange={(value) =>
-              onLocationTypeChange(value as LocationType | 'all')
+              onLocationTypeChange(value as "all" | LocationType)
             }
           >
             <SelectTrigger className="w-full sm:w-[180px] border-3 border-primary/20 focus:border-primary shadow-sm">

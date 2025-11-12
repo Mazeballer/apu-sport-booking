@@ -20,13 +20,31 @@ import {
   WrenchIcon,
 } from "lucide-react";
 
-// IMPORTANT: these should match your lib/facility-types.ts
 import type {
-  Facility as UiFacility,
   SportType,
   LocationType,
   AvailableEquipment,
 } from "@/lib/facility-types";
+
+type UiFacility = {
+  id: string;
+  name: string;
+  type: SportType;
+  location: string;
+  locationType: LocationType;
+  description?: string | null;
+  capacity?: number | null;
+  image?: string;
+  layoutImage?: string;
+  openTime?: string | null;
+  closeTime?: string | null;
+  isMultiSport?: boolean;
+  courts?: { supportedSports: SportType[] }[];
+  availableEquipment?: AvailableEquipment[];
+  status?: "active" | "inactive";
+  rules?: string[];
+  numberOfCourts?: number | null;
+};
 
 export default async function AdminPage({
   searchParams,
@@ -159,11 +177,13 @@ export default async function AdminPage({
       layoutImage,
       capacity: f.capacity ?? 0,
       rules: rulesArray,
-      operatingHours: {
-        start: f.openTime ?? "08:00",
-        end: f.closeTime ?? "22:00",
-      },
-      courts: [], // you’ll fill this later when you wire real courts
+      openTime: f.openTime ?? null,
+      closeTime: f.closeTime ?? null,
+      numberOfCourts: f.numberOfCourts ?? 0,
+      courts:
+        f.isMultiSport && f.sharedSports?.length
+          ? [{ supportedSports: f.sharedSports as SportType[] }]
+          : [],
       status: f.active ? "active" : "inactive",
       isMultiSport: f.isMultiSport ?? false,
       availableEquipment,
@@ -277,7 +297,7 @@ export default async function AdminPage({
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <OperatingHoursManagement facilities={facilitiesFromDb}/>
+                  <OperatingHoursManagement facilities={facilitiesFromDb} />
                 </CardContent>
               </Card>
             </TabsContent>

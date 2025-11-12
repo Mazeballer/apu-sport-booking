@@ -1,23 +1,99 @@
-'use client';
+// src/app/(protected)/HomeClient.tsx
+"use client";
 
-import { Navbar } from '@/components/navbar';
-import { FacilityCard } from '@/components/facility-card';
-import { FacilityFilters } from '@/components/facility-filters';
-import { facilities, type SportType, type LocationType } from '@/lib/data';
-import { useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Navbar } from "@/components/navbar";
+import { FacilityCard } from "@/components/facility-card";
+import { FacilityFilters } from "@/components/facility-filters";
+import type {
+  FacilityCardData,
+  SportType,
+  LocationType,
+} from "@/lib/facility-types";
+import { useEffect, useMemo, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { createBrowserClient } from "@/lib/supabase/client";
 
-export default function HomeClient() {
-  const [sportType, setSportType] = useState<SportType | 'all'>('all');
-  const [locationType, setLocationType] = useState<LocationType | 'all'>('all');
+export default function HomeClient({
+  facilities,
+}: {
+  facilities: FacilityCardData[];
+}) {
+  const [rows, setRows] = useState<FacilityCardData[]>(facilities);
+  const [sportType, setSportType] = useState<"all" | SportType>("all");
+  const [locationType, setLocationType] = useState<"all" | LocationType>("all");
   const [isLoading] = useState(false);
 
-  const filteredFacilities = facilities.filter((facility) => {
-    if (sportType !== 'all' && facility.type !== sportType) return false;
-    if (locationType !== 'all' && facility.locationType !== locationType)
-      return false;
-    return true;
-  });
+  // Map a DB row into the card shape when realtime events arrive
+  function mapDbToCard(db: any): FacilityCardData {
+    return {
+      id: db.id,
+      name: db.name,
+      type: db.type,
+      location: db.location,
+      locationType: db.locationType ?? "Indoor",
+      description: db.description ?? "",
+      capacity: db.capacity ?? 0,
+      photos: Array.isArray(db.photos) ? db.photos : [],
+      openTime: db.openTime ?? null,
+      closeTime: db.closeTime ?? null,
+      active: db.active ?? true,
+      isMultiSport: db.isMultiSport ?? false,
+      sharedSports: db.sharedSports ?? [],
+      numberOfCourts: db.numberOfCourts ?? 1,
+      rules: db.rules ?? null,
+    };
+  }
+
+  useEffect(() => {
+    setRows(facilities);
+  }, [facilities]);
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+
+    const ch = supabase
+      .channel("rt-facilities")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Facility" }, // Prisma model table name is usually "Facility"
+        (payload) => {
+          const next = payload.new as any;
+          const prevRow = payload.old as any;
+
+          setRows((prev) => {
+            let arr = [...prev];
+            if (payload.eventType === "INSERT") {
+              const card = mapDbToCard(next);
+              // avoid duplicates if we already have it
+              if (!arr.find((f) => f.id === card.id)) arr.unshift(card);
+              return arr;
+            }
+            if (payload.eventType === "UPDATE") {
+              const card = mapDbToCard(next);
+              return arr.map((f) => (f.id === card.id ? card : f));
+            }
+            if (payload.eventType === "DELETE") {
+              return arr.filter((f) => f.id !== prevRow.id);
+            }
+            return arr;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    return rows.filter((f) => {
+      if (sportType !== "all" && f.type !== sportType) return false;
+      if (locationType !== "all" && f.locationType !== locationType)
+        return false;
+      return true;
+    });
+  }, [rows, sportType, locationType]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,31 +125,11 @@ export default function HomeClient() {
               </div>
             ))}
           </div>
-        ) : filteredFacilities.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
-              <svg
-                className="w-12 h-12 text-muted-foreground"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No facilities found</h3>
-            <p className="text-muted-foreground">
-              Try adjusting your filters to see more results
-            </p>
-          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16">{/* empty state */}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredFacilities.map((facility) => (
+            {filtered.map((facility) => (
               <FacilityCard key={facility.id} facility={facility} />
             ))}
           </div>

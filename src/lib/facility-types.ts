@@ -5,39 +5,36 @@ export type SportType =
   | "Football"
   | "Volleyball"
   | "Swimming"
-  | string
+  | string;
 
-export type LocationType = "Indoor" | "Outdoor"
+export type LocationType = "Indoor" | "Outdoor";
 
 export type AvailableEquipment = {
-  equipmentId: string
-  quantity: number
-}
+  equipmentId: string;
+  quantity: number;
+};
 
 export type CourtUi = {
-  id: string
-  name: string
-  layoutImage?: string
-  supportedSports: SportType[]
-}
+  id: string;
+  name: string;
+  layoutImage?: string;
+  supportedSports: SportType[];
+};
 
-export type Facility = {
-  id: string
-  name: string
-  type: SportType
-  location: string
-  locationType: LocationType
-  description: string
-  image: string
-  layoutImage: string
-  capacity: number
-  rules: string[]
-  operatingHours: {
-    start: string
-    end: string
-  }
-  courts: CourtUi[]
-  status: "active" | "inactive"
-  isMultiSport: boolean
-  availableEquipment: AvailableEquipment[]
-}
+export type FacilityCardData = {
+  id: string;
+  name: string;
+  type: SportType;
+  location: string;
+  locationType: LocationType;
+  description?: string | null;
+  capacity?: number | null;
+  photos?: string[]; // first item used as cover
+  openTime?: string | null; // "07:00"
+  closeTime?: string | null; // "22:00"
+  active?: boolean; // optional for badges or filtering
+  isMultiSport?: boolean;
+  sharedSports?: string[];
+  numberOfCourts?: number;
+  rules?: string[] | string | null; // tolerate both until you fully normalize
+};

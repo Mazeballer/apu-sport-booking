@@ -1,20 +1,21 @@
-'use client';
+// components/booking-flow.tsx
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Badge } from '@/components/ui/badge';
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -22,33 +23,71 @@ import {
   ClockIcon,
   MapPinIcon,
   PackageIcon,
-} from 'lucide-react';
-import Image from 'next/image';
-import { useToast } from '@/hooks/use-toast';
-import { equipment } from '@/lib/data';
-import type { Facility } from '@/lib/data';
+} from "lucide-react";
+import Image from "next/image";
+import { useToast } from "@/hooks/use-toast";
+
+type BookingUI = {
+  id: string;
+  facilityId: string;
+  courtId: string;
+  start: string | Date;
+  end: string | Date;
+  status: "confirmed" | "cancelled" | "rescheduled";
+};
 
 interface BookingFlowProps {
-  facility: Facility;
+  facility: {
+    id: string;
+    name: string;
+    type: string;
+    location: string;
+    locationType: string;
+    description?: string | null;
+    capacity?: number | null;
+    photos?: string[]; // [facilityImage, layoutImage]
+    openTime?: string | null; // "07:00"
+    closeTime?: string | null; // "22:00"
+    rules?: string[] | string | null;
+    courts: { id: string; name: string }[];
+  };
+  equipment: {
+    id: string;
+    name: string;
+    qtyAvailable: number;
+    qtyTotal: number;
+  }[];
+  existingBookings: BookingUI[];
+  onCreateBooking: (payload: {
+    facilityId: string;
+    courtId: string;
+    startISO: string;
+    endISO: string;
+    equipmentIds: string[];
+    notes?: string;
+  }) => Promise<void>;
 }
 
-export function BookingFlow({ facility }: BookingFlowProps) {
+export function BookingFlow({
+  facility,
+  equipment,
+  existingBookings,
+  onCreateBooking,
+}: BookingFlowProps) {
   const router = useRouter();
   const { toast } = useToast();
 
   const [selectedDate, setSelectedDate] = useState<Date>();
-  const [selectedDuration, setSelectedDuration] = useState<number>();
+  const [selectedDuration, setSelectedDuration] = useState<1 | 2>();
   const [selectedTime, setSelectedTime] = useState<string>();
   const [selectedCourt, setSelectedCourt] = useState<string>();
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
-  const [equipmentNotes, setEquipmentNotes] = useState('');
+  const [equipmentNotes, setEquipmentNotes] = useState("");
   const [showLayoutDialog, setShowLayoutDialog] = useState(false);
   const [showAvailabilityDialog, setShowAvailabilityDialog] = useState(false);
-  const [layoutImage, setLayoutImage] = useState('');
+  const [layoutImage, setLayoutImage] = useState("");
 
-  const facilityEquipment = equipment.filter(
-    (eq) => eq.facilityId === facility.id
-  );
+  const facilityEquipment = equipment;
 
   const getCurrentStep = () => {
     if (!selectedDate) return 1;
@@ -57,69 +96,158 @@ export function BookingFlow({ facility }: BookingFlowProps) {
     if (!selectedCourt) return 4;
     return 5;
   };
-
   const currentStep = getCurrentStep();
 
-  const generateTimeSlots = () => {
-    const slots = [];
-    const [startHour] = facility.operatingHours.start.split(':').map(Number);
-    const [endHour] = facility.operatingHours.end.split(':').map(Number);
-
-    for (let hour = startHour; hour < endHour; hour++) {
-      slots.push(`${hour.toString().padStart(2, '0')}:00`);
-    }
+  const timeSlots = useMemo(() => {
+    const slots: string[] = [];
+    const startH = Number((facility.openTime ?? "07:00").split(":")[0]);
+    const endH = Number((facility.closeTime ?? "22:00").split(":")[0]);
+    for (let h = startH; h < endH; h++)
+      slots.push(`${String(h).padStart(2, "0")}:00`);
     return slots;
+  }, [facility.openTime, facility.closeTime]);
+
+  // Utilities for overlap
+  const buildDateAtTime = (date: Date, hhmm: string) => {
+    const [hh, mm] = hhmm.split(":").map(Number);
+    const d = new Date(date);
+    d.setHours(hh, mm, 0, 0);
+    return d;
   };
-
-  const timeSlots = generateTimeSlots();
-
-  const generateAvailabilityData = () => {
-    const now = new Date();
-    const isToday = selectedDate?.toDateString() === now.toDateString();
-    const currentHour = now.getHours();
-
-    return (
-      facility.courts?.map((court) => {
-        const availability: {
-          [key: string]: 'available' | 'unavailable' | 'elapsed';
-        } = {};
-
-        timeSlots.forEach((slot) => {
-          const slotHour = Number.parseInt(slot.split(':')[0]);
-
-          if (isToday && slotHour < currentHour) {
-            availability[slot] = 'elapsed';
-          } else {
-            availability[slot] =
-              Math.random() > 0.3 ? 'available' : 'unavailable';
-          }
-        });
-
-        return {
-          courtId: court.id,
-          courtName: court.name,
-          availability,
-        };
-      }) || []
-    );
+  const addHours = (d: Date, hours: number) => {
+    const x = new Date(d);
+    x.setHours(x.getHours() + hours);
+    return x;
   };
+  const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
+    aStart < bEnd && aEnd > bStart;
 
-  const handleConfirmBooking = () => {
-    toast({
-      title: 'Booking Confirmed!',
-      description: `Your booking for ${
-        facility.name
-      } on ${selectedDate?.toLocaleDateString()} at ${selectedTime} has been confirmed.`,
+  // Bookings filtered to the selected day
+  const dayBookings = useMemo(() => {
+    if (!selectedDate) return [];
+    const y = selectedDate.getFullYear();
+    const m = selectedDate.getMonth();
+    const d = selectedDate.getDate();
+    return existingBookings.filter((b) => {
+      if (b.status === "cancelled") return false;
+      const s = new Date(b.start);
+      return s.getFullYear() === y && s.getMonth() === m && s.getDate() === d;
     });
-    router.push('/bookings');
+  }, [existingBookings, selectedDate]);
+
+  // Step 3: a time slot is shown as booked if all courts are occupied for the chosen duration
+  const isSlotFullyBooked = (slot: string) => {
+    if (!selectedDate || !selectedDuration) return false;
+    const slotStart = buildDateAtTime(selectedDate, slot);
+    const slotEnd = addHours(slotStart, selectedDuration);
+    // for each court, check if it is free
+    const freeCourtExists = facility.courts.some((c) => {
+      const clashes = dayBookings.some(
+        (b) =>
+          b.courtId === c.id &&
+          overlaps(slotStart, slotEnd, new Date(b.start), new Date(b.end))
+      );
+      return !clashes;
+    });
+    return !freeCourtExists;
   };
 
-  const handleViewLayout = (courtId: string) => {
-    const court = facility.courts?.find((c) => c.id === courtId);
-    if (court) {
-      setLayoutImage(court.layoutImage);
-      setShowLayoutDialog(true);
-    }
+  // Step 4: for the selected time, compute each court status
+  const courtStatusForSelectedTime = useMemo(() => {
+    if (!selectedDate || !selectedDuration || !selectedTime) return {};
+    const slotStart = buildDateAtTime(selectedDate, selectedTime);
+    const slotEnd = addHours(slotStart, selectedDuration);
+    const currentHour = new Date().getHours();
+    const isToday = selectedDate.toDateString() === new Date().toDateString();
+
+    const status: Record<string, "available" | "unavailable" | "elapsed"> = {};
+    facility.courts.forEach((c) => {
+      // elapsed check only if same day and slot start is before now
+      if (isToday && slotStart.getHours() < currentHour) {
+        status[c.id] = "elapsed";
+        return;
+      }
+      const clash = dayBookings.some(
+        (b) =>
+          b.courtId === c.id &&
+          overlaps(slotStart, slotEnd, new Date(b.start), new Date(b.end))
+      );
+      status[c.id] = clash ? "unavailable" : "available";
+    });
+    return status;
+  }, [
+    facility.courts,
+    dayBookings,
+    selectedDate,
+    selectedDuration,
+    selectedTime,
+  ]);
+
+  // Availability dialog table needs per court per slot
+  const generateAvailabilityData = () => {
+    if (!selectedDate || !selectedDuration) return [];
+    return facility.courts.map((court) => {
+      const availability: Record<
+        string,
+        "available" | "unavailable" | "elapsed"
+      > = {};
+      const now = new Date();
+      const isToday = selectedDate.toDateString() === now.toDateString();
+      const nowHour = now.getHours();
+
+      timeSlots.forEach((slot) => {
+        const start = buildDateAtTime(selectedDate, slot);
+        const end = addHours(start, selectedDuration);
+        if (isToday && start.getHours() < nowHour) {
+          availability[slot] = "elapsed";
+        } else {
+          const clash = dayBookings.some(
+            (b) =>
+              b.courtId === court.id &&
+              overlaps(start, end, new Date(b.start), new Date(b.end))
+          );
+          availability[slot] = clash ? "unavailable" : "available";
+        }
+      });
+
+      return {
+        courtId: court.id,
+        courtName: court.name,
+        availability,
+      };
+    });
+  };
+
+  const handleConfirmBooking = async () => {
+    if (!selectedDate || !selectedDuration || !selectedTime || !selectedCourt)
+      return;
+
+    const start = buildDateAtTime(selectedDate, selectedTime);
+    const end = addHours(start, selectedDuration);
+
+    await onCreateBooking({
+      facilityId: facility.id,
+      courtId: selectedCourt,
+      startISO: start.toISOString(),
+      endISO: end.toISOString(),
+      equipmentIds: selectedEquipment,
+      notes: equipmentNotes || undefined,
+    });
+
+    toast({
+      title: "Booking Confirmed",
+      description: `${
+        facility.name
+      } on ${selectedDate.toLocaleDateString()} at ${selectedTime}`,
+    });
+
+    router.push("/bookings");
+  };
+
+  const handleViewLayout = () => {
+    const layout = facility.photos?.[1] ?? facility.photos?.[0] ?? "";
+    setLayoutImage(layout);
+    setShowLayoutDialog(true);
   };
 
   const toggleEquipment = (equipmentId: string) => {
@@ -131,11 +259,11 @@ export function BookingFlow({ facility }: BookingFlowProps) {
   };
 
   const steps = [
-    { number: 1, label: 'Select Date', icon: CalendarIcon },
-    { number: 2, label: 'Choose Duration', icon: ClockIcon },
-    { number: 3, label: 'Pick Time Slot', icon: ClockIcon },
-    { number: 4, label: 'Select Court', icon: MapPinIcon },
-    { number: 5, label: 'Add Equipment', icon: PackageIcon },
+    { number: 1, label: "Select Date", icon: CalendarIcon },
+    { number: 2, label: "Choose Duration", icon: ClockIcon },
+    { number: 3, label: "Pick Time Slot", icon: ClockIcon },
+    { number: 4, label: "Select Court", icon: MapPinIcon },
+    { number: 5, label: "Add Equipment", icon: PackageIcon },
   ];
 
   return (
@@ -146,6 +274,7 @@ export function BookingFlow({ facility }: BookingFlowProps) {
       </Button>
 
       <div className="flex flex-col lg:flex-row gap-8">
+        {/* Steps rail */}
         <div className="hidden lg:block lg:w-64 flex-shrink-0">
           <Card className="rounded-2xl shadow-lg sticky top-6">
             <CardHeader>
@@ -157,18 +286,16 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                   const isCompleted = currentStep > step.number;
                   const isCurrent = currentStep === step.number;
                   const Icon = step.icon;
-
                   return (
                     <div key={step.number} className="flex items-start gap-3">
-                      {/* Step indicator line */}
                       <div className="flex flex-col items-center">
                         <div
                           className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
                             isCompleted
-                              ? 'bg-primary border-primary text-primary-foreground'
+                              ? "bg-primary border-primary text-primary-foreground"
                               : isCurrent
-                              ? 'border-primary text-primary bg-primary/10'
-                              : 'border-muted-foreground/30 text-muted-foreground'
+                              ? "border-primary text-primary bg-primary/10"
+                              : "border-muted-foreground/30 text-muted-foreground"
                           }`}
                         >
                           {isCompleted ? (
@@ -181,21 +308,20 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                           <div
                             className={`w-0.5 h-12 mt-2 ${
                               isCompleted
-                                ? 'bg-primary'
-                                : 'bg-muted-foreground/20'
+                                ? "bg-primary"
+                                : "bg-muted-foreground/20"
                             }`}
                           />
                         )}
                       </div>
-                      {/* Step label */}
                       <div className="pt-2">
                         <p
                           className={`text-sm font-medium ${
                             isCurrent
-                              ? 'text-foreground'
+                              ? "text-foreground"
                               : isCompleted
-                              ? 'text-muted-foreground'
-                              : 'text-muted-foreground/60'
+                              ? "text-muted-foreground"
+                              : "text-muted-foreground/60"
                           }`}
                         >
                           {step.label}
@@ -210,10 +336,10 @@ export function BookingFlow({ facility }: BookingFlowProps) {
         </div>
 
         <div className="flex-1 space-y-6">
-          {/* Step 1: Select Date */}
+          {/* Step 1: date */}
           <Card
             className={`rounded-2xl shadow-lg transition-all ${
-              currentStep === 1 ? 'ring-2 ring-primary' : ''
+              currentStep === 1 ? "ring-2 ring-primary" : ""
             }`}
           >
             <CardHeader>
@@ -266,7 +392,9 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                     mode="single"
                     selected={selectedDate}
                     onSelect={setSelectedDate}
-                    disabled={(date) => date < new Date()}
+                    disabled={(date) =>
+                      date < new Date(new Date().setHours(0, 0, 0, 0))
+                    }
                     className="rounded-md border"
                   />
                 </div>
@@ -274,14 +402,14 @@ export function BookingFlow({ facility }: BookingFlowProps) {
             </CardContent>
           </Card>
 
-          {/* Step 2: Select Duration */}
+          {/* Step 2: duration */}
           <Card
             className={`rounded-2xl shadow-lg transition-all ${
               currentStep === 2
-                ? 'ring-2 ring-primary'
+                ? "ring-2 ring-primary"
                 : currentStep < 2
-                ? 'opacity-60'
-                : ''
+                ? "opacity-60"
+                : ""
             }`}
           >
             <CardHeader>
@@ -292,25 +420,25 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                 <div>
                   <CardTitle className="text-xl">Select Duration</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    How long do you need the facility?
+                    How long do you need the facility
                   </p>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
-                {[1, 2].map((hours) => (
+                {[1, 2].map((h) => (
                   <Button
-                    key={hours}
-                    variant={selectedDuration === hours ? 'default' : 'outline'}
-                    onClick={() => setSelectedDuration(hours)}
+                    key={h}
+                    variant={selectedDuration === h ? "default" : "outline"}
+                    onClick={() => setSelectedDuration(h as 1 | 2)}
                     disabled={currentStep < 2}
                     className="h-20"
                   >
                     <div className="text-center">
-                      <div className="text-2xl font-bold">{hours}</div>
+                      <div className="text-2xl font-bold">{h}</div>
                       <div className="text-xs">
-                        {hours === 1 ? 'hour' : 'hours'}
+                        {h === 1 ? "hour" : "hours"}
                       </div>
                     </div>
                   </Button>
@@ -319,14 +447,14 @@ export function BookingFlow({ facility }: BookingFlowProps) {
             </CardContent>
           </Card>
 
-          {/* Step 3: Select Time */}
+          {/* Step 3: time */}
           <Card
             className={`rounded-2xl shadow-lg transition-all ${
               currentStep === 3
-                ? 'ring-2 ring-primary'
+                ? "ring-2 ring-primary"
                 : currentStep < 3
-                ? 'opacity-60'
-                : ''
+                ? "opacity-60"
+                : ""
             }`}
           >
             <CardHeader>
@@ -345,20 +473,22 @@ export function BookingFlow({ facility }: BookingFlowProps) {
             <CardContent>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
                 {timeSlots.map((time) => {
-                  const isBooked = Math.random() > 0.7;
+                  const booked = selectedDuration
+                    ? isSlotFullyBooked(time)
+                    : false;
                   return (
                     <Button
                       key={time}
-                      variant={selectedTime === time ? 'default' : 'outline'}
-                      onClick={() => !isBooked && setSelectedTime(time)}
-                      disabled={isBooked || currentStep < 3}
+                      variant={selectedTime === time ? "default" : "outline"}
+                      onClick={() => !booked && setSelectedTime(time)}
+                      disabled={booked || currentStep < 3}
                       className="h-16"
                     >
                       <div className="text-center">
                         <div className="font-semibold">{time}</div>
-                        {isBooked && (
+                        {booked && (
                           <div className="text-xs text-muted-foreground">
-                            Booked
+                            Fully booked
                           </div>
                         )}
                       </div>
@@ -369,14 +499,14 @@ export function BookingFlow({ facility }: BookingFlowProps) {
             </CardContent>
           </Card>
 
-          {/* Step 4: Select Court */}
+          {/* Step 4: court */}
           <Card
             className={`rounded-2xl shadow-lg transition-all ${
               currentStep === 4
-                ? 'ring-2 ring-primary'
+                ? "ring-2 ring-primary"
                 : currentStep < 4
-                ? 'opacity-60'
-                : ''
+                ? "opacity-60"
+                : ""
             }`}
           >
             <CardHeader>
@@ -395,16 +525,7 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                 <Button
                   variant="link"
                   size="sm"
-                  onClick={() => {
-                    const layoutImg = selectedCourt
-                      ? facility.courts?.find((c) => c.id === selectedCourt)
-                          ?.layoutImage
-                      : facility.layoutImage;
-                    if (layoutImg) {
-                      setLayoutImage(layoutImg);
-                      setShowLayoutDialog(true);
-                    }
-                  }}
+                  onClick={handleViewLayout}
                   disabled={currentStep < 4}
                   className="text-primary"
                 >
@@ -413,54 +534,55 @@ export function BookingFlow({ facility }: BookingFlowProps) {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col lg:flex-row gap-6">
-                {/* Courts list on the left */}
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
-                  {facility.courts?.map((court) => {
-                    const isAvailable = Math.random() > 0.3;
-                    return (
-                      <div
-                        key={court.id}
-                        className={`border rounded-xl p-4 cursor-pointer transition-all ${
-                          selectedCourt === court.id
-                            ? 'border-primary bg-primary/5'
-                            : isAvailable && currentStep >= 4
-                            ? 'border-border hover:border-primary/50'
-                            : 'border-border opacity-50 cursor-not-allowed'
-                        }`}
-                        onClick={() =>
-                          isAvailable &&
-                          currentStep >= 4 &&
-                          setSelectedCourt(court.id)
-                        }
-                      >
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-semibold">{court.name}</h4>
-                          <Badge
-                            variant={isAvailable ? 'default' : 'secondary'}
-                            className="text-xs"
-                          >
-                            {isAvailable ? 'Available' : 'Booked'}
-                          </Badge>
-                        </div>
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+                {facility.courts.map((court) => {
+                  const status =
+                    courtStatusForSelectedTime[court.id] ?? "elapsed";
+                  const isAvailable = status === "available";
+                  return (
+                    <div
+                      key={court.id}
+                      className={`border rounded-xl p-4 cursor-pointer transition-all ${
+                        selectedCourt === court.id
+                          ? "border-primary bg-primary/5"
+                          : isAvailable && currentStep >= 4
+                          ? "border-border hover:border-primary/50"
+                          : "border-border opacity-50 cursor-not-allowed"
+                      }`}
+                      onClick={() =>
+                        isAvailable &&
+                        currentStep >= 4 &&
+                        setSelectedCourt(court.id)
+                      }
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold">{court.name}</h4>
+                        <Badge
+                          variant={isAvailable ? "default" : "secondary"}
+                          className="text-xs"
+                        >
+                          {status === "elapsed"
+                            ? "Elapsed"
+                            : isAvailable
+                            ? "Available"
+                            : "Booked"}
+                        </Badge>
                       </div>
-                    );
-                  })}
-                </div>
-
-                {/* Single layout viewer on the right */}
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
 
-          {/* Step 5: Select Equipment */}
+          {/* Step 5: equipment */}
           <Card
             className={`rounded-2xl shadow-lg transition-all ${
               currentStep === 5
-                ? 'ring-2 ring-primary'
+                ? "ring-2 ring-primary"
                 : currentStep < 5
-                ? 'opacity-60'
-                : ''
+                ? "opacity-60"
+                : ""
             }`}
           >
             <CardHeader>
@@ -471,7 +593,7 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                 <div>
                   <CardTitle className="text-xl">Optional Equipment</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Select any equipment you need (optional)
+                    Select any equipment you need
                   </p>
                 </div>
               </div>
@@ -498,14 +620,14 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                       </Label>
                     </div>
                     <Badge
-                      variant={eq.qtyAvailable > 0 ? 'default' : 'secondary'}
+                      variant={eq.qtyAvailable > 0 ? "default" : "secondary"}
                       className={
                         eq.qtyAvailable > 0
-                          ? 'bg-green-500 hover:bg-green-600 text-white'
-                          : 'bg-gray-200 text-gray-600'
+                          ? "bg-green-500 hover:bg-green-600 text-white"
+                          : "bg-gray-200 text-gray-600"
                       }
                     >
-                      {eq.qtyAvailable > 0 ? 'Available' : 'Out of Stock'}
+                      {eq.qtyAvailable > 0 ? "Available" : "Out of Stock"}
                     </Badge>
                   </div>
                 ))}
@@ -523,10 +645,6 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                   disabled={currentStep < 5}
                   className="min-h-24 resize-none"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Let us know if you have any special requirements or requests
-                  for equipment.
-                </p>
               </div>
 
               {currentStep === 5 && (
@@ -556,7 +674,7 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                         <span className="text-muted-foreground">Court:</span>
                         <span className="font-semibold">
                           {
-                            facility.courts?.find((c) => c.id === selectedCourt)
+                            facility.courts.find((c) => c.id === selectedCourt)
                               ?.name
                           }
                         </span>
@@ -603,7 +721,7 @@ export function BookingFlow({ facility }: BookingFlowProps) {
           </DialogHeader>
           <div className="relative w-full h-[400px] rounded-lg overflow-hidden">
             <Image
-              src={layoutImage || '/placeholder.svg'}
+              src={layoutImage || "/placeholder.svg"}
               alt="Court Layout"
               fill
               className="object-contain"
@@ -612,6 +730,7 @@ export function BookingFlow({ facility }: BookingFlowProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Live availability by court and slot */}
       <Dialog
         open={showAvailabilityDialog}
         onOpenChange={setShowAvailabilityDialog}
@@ -631,10 +750,10 @@ export function BookingFlow({ facility }: BookingFlowProps) {
               >
                 <CalendarIcon className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
                 <p className="text-sm md:text-base text-muted-foreground hover:text-primary">
-                  {selectedDate?.toLocaleDateString('en-US', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
+                  {selectedDate?.toLocaleDateString("en-US", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
                   })}
                 </p>
               </button>
@@ -642,7 +761,6 @@ export function BookingFlow({ facility }: BookingFlowProps) {
           </div>
 
           <div className="p-4 md:p-8 space-y-4 md:space-y-6 overflow-y-auto max-h-[calc(95vh-140px)]">
-            {/* Legend */}
             <div className="flex items-center gap-3 md:gap-6 text-xs md:text-sm">
               <div className="flex items-center gap-1.5 md:gap-2">
                 <div className="w-3 h-3 md:w-4 md:h-4 border-2 border-border bg-background rounded" />
@@ -658,11 +776,9 @@ export function BookingFlow({ facility }: BookingFlowProps) {
               </div>
             </div>
 
-            {/* Availability Grid */}
             <div className="border rounded-lg overflow-hidden">
               <div className="overflow-x-auto overflow-y-visible scrollbar-thin">
                 <div className="inline-block min-w-full">
-                  {/* Time slots header */}
                   <div className="flex border-b bg-muted/50">
                     <div className="w-24 md:w-40 flex-shrink-0 p-2 md:p-3 font-semibold border-r sticky left-0 bg-muted/50 z-10 text-xs md:text-sm">
                       Court
@@ -677,7 +793,6 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                     ))}
                   </div>
 
-                  {/* Court rows */}
                   {generateAvailabilityData().map((courtData) => (
                     <div
                       key={courtData.courtId}
@@ -692,11 +807,11 @@ export function BookingFlow({ facility }: BookingFlowProps) {
                           <div
                             key={slot}
                             className={`w-16 md:w-24 h-10 md:h-14 flex-shrink-0 border-r last:border-r-0 transition-colors ${
-                              status === 'unavailable'
-                                ? 'bg-primary'
-                                : status === 'elapsed'
-                                ? 'bg-muted'
-                                : 'bg-background hover:bg-accent/50 cursor-pointer'
+                              status === "unavailable"
+                                ? "bg-primary"
+                                : status === "elapsed"
+                                ? "bg-muted"
+                                : "bg-background hover:bg-accent/50 cursor-pointer"
                             }`}
                           />
                         );
@@ -707,7 +822,6 @@ export function BookingFlow({ facility }: BookingFlowProps) {
               </div>
             </div>
 
-            {/* Select button */}
             <Button
               onClick={() => setShowAvailabilityDialog(false)}
               className="w-full"

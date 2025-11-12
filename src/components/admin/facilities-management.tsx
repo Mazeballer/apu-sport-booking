@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
-  Facility,
   SportType,
   LocationType,
   AvailableEquipment,
@@ -59,20 +57,40 @@ import {
   toggleFacilityActiveAction,
   type FacilityInput,
 } from "@/app/(protected)/admin/facilities/actions";
+import { uploadFacilityImage } from "@/lib/upload";
 import { notify } from "@/lib/toast";
+import { getFacilityByIdAction } from "@/app/(protected)/admin/facilities/actions";
 
-// Hash function to generate consistent color index from sport name
+type Facility = {
+  id: string;
+  name: string;
+  type: SportType;
+  location: string;
+  locationType: LocationType;
+  description?: string | null;
+  capacity?: number | null;
+  openTime?: string | null;
+  closeTime?: string | null;
+  image?: string;
+  layoutImage?: string;
+  isMultiSport?: boolean;
+  courts?: { supportedSports: SportType[] }[];
+  availableEquipment?: AvailableEquipment[];
+  status?: "active" | "inactive";
+  rules?: string[];
+  numberOfCourts?: number | null;
+};
+
+// util for badge colors
 function hashString(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
+    hash = hash & hash;
   }
   return Math.abs(hash);
 }
-
-// Color palette for sport types (dark shades with white text)
 const sportColorPalette = [
   "bg-orange-700 text-white hover:bg-orange-800 border-orange-700",
   "bg-emerald-700 text-white hover:bg-emerald-800 border-emerald-700",
@@ -91,8 +109,6 @@ const sportColorPalette = [
   "bg-red-700 text-white hover:bg-red-800 border-red-700",
   "bg-green-700 text-white hover:bg-green-800 border-green-700",
 ];
-
-// Predefined colors for common sports (to maintain consistency)
 const predefinedSportColors: Record<string, string> = {
   Basketball: "bg-orange-700 text-white hover:bg-orange-800 border-orange-700",
   Badminton:
@@ -102,19 +118,19 @@ const predefinedSportColors: Record<string, string> = {
   Volleyball: "bg-rose-700 text-white hover:bg-rose-800 border-rose-700",
   Swimming: "bg-cyan-700 text-white hover:bg-cyan-800 border-cyan-700",
 };
-
-// Function to get color for any sport type
 function getSportTypeColor(sportType: string): string {
-  // Check if it's a predefined sport
-  if (predefinedSportColors[sportType]) {
-    return predefinedSportColors[sportType];
-  }
-
-  // For new/custom sports, generate color from hash
+  if (predefinedSportColors[sportType]) return predefinedSportColors[sportType];
   const hash = hashString(sportType);
   const colorIndex = hash % sportColorPalette.length;
   return sportColorPalette[colorIndex];
 }
+
+// helper for consistent time display
+const formatTime = (time?: string | null) => {
+  if (!time) return "—";
+  // if it's a full datetime string, slice to HH:mm
+  return time.length > 5 ? time.slice(0, 5) : time;
+};
 
 export function FacilitiesManagement({
   initialFacilities,
@@ -123,19 +139,23 @@ export function FacilitiesManagement({
 }) {
   const isMobile = useIsMobile();
   const router = useRouter();
+
   const [facilities, setFacilities] = useState<Facility[]>(initialFacilities);
+  const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [deletingFacility, setDeletingFacility] = useState<Facility | null>(
+    null
+  );
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setFacilities(initialFacilities);
   }, [initialFacilities]);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
-  const [deletingFacility, setDeletingFacility] = useState<Facility | null>(
-    null
-  );
+
   const sportOptions = Array.from(
     new Set(facilities.map((f) => f.type).filter(Boolean))
   );
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [layoutImageFile, setLayoutImageFile] = useState<File | null>(null);
 
@@ -158,7 +178,6 @@ export function FacilitiesManagement({
 
   const validateForm = (): { isValid: boolean; missingFields: string[] } => {
     const missingFields: string[] = [];
-
     if (!formData.name.trim()) missingFields.push("Facility Name");
     if (!formData.location.trim()) missingFields.push("Location");
     if (!imageFile && !editingFacility) missingFields.push("Facility Image");
@@ -167,63 +186,58 @@ export function FacilitiesManagement({
     if (!formData.description.trim()) missingFields.push("Description");
     if (!formData.rules || formData.rules.length === 0)
       missingFields.push("Facility Rules (at least one)");
-
-    return {
-      isValid: missingFields.length === 0,
-      missingFields,
-    };
+    return { isValid: missingFields.length === 0, missingFields };
   };
 
   const handleAdd = async () => {
-    const validation = validateForm();
-    if (!validation.isValid) {
-      const msg =
-        "Please fill in all required fields: " +
-        validation.missingFields.join(", ");
-      notify.error(msg);
-      return;
-    }
-
-    const imageUrl = imageFile
-      ? URL.createObjectURL(imageFile)
-      : `/placeholder.svg?height=400&width=600&query=${formData.type} facility`;
-
-    const layoutImageUrl = layoutImageFile
-      ? URL.createObjectURL(layoutImageFile)
-      : `/placeholder.svg?height=400&width=600&query=${formData.type} court layout`;
-
-    const input: FacilityInput = {
-      id: editingFacility?.id,
-      name: formData.name,
-      type: formData.type,
-      location: formData.location,
-      locationType: formData.locationType,
-      description: formData.description,
-      capacity: formData.capacity,
-      openTime: formData.operatingStart,
-      closeTime: formData.operatingEnd,
-      isMultiSport: formData.isMultiSport,
-      sharedSports: formData.isMultiSport ? formData.supportedSports : [],
-      numberOfCourts: formData.numberOfCourts,
-      rules: formData.rules,
-      photos: [imageUrl, layoutImageUrl],
-      active: formData.status === "active",
-    };
-
+    if (saving) return;
+    setSaving(true);
     try {
+      const validation = validateForm();
+      if (!validation.isValid) {
+        notify.error(
+          "Please fill in all required fields: " +
+            validation.missingFields.join(", ")
+        );
+        return;
+      }
+
+      const folder = `facility_${crypto.randomUUID()}`;
+      const imageUrl = imageFile
+        ? await uploadFacilityImage(imageFile, folder)
+        : `/placeholder.svg?height=400&width=600&query=${formData.type} facility`;
+      const layoutImageUrl = layoutImageFile
+        ? await uploadFacilityImage(layoutImageFile, folder)
+        : `/placeholder.svg?height=400&width=600&query=${formData.type} court layout`;
+
+      const input: FacilityInput = {
+        name: formData.name.trim(),
+        type: formData.type,
+        location: formData.location.trim(),
+        locationType: formData.locationType,
+        description: formData.description,
+        capacity: formData.capacity,
+        openTime: formData.operatingStart,
+        closeTime: formData.operatingEnd,
+        isMultiSport: formData.isMultiSport,
+        sharedSports: formData.isMultiSport ? formData.supportedSports : [],
+        numberOfCourts: formData.numberOfCourts,
+        rules: formData.rules,
+        photos: [imageUrl, layoutImageUrl],
+        active: formData.status === "active",
+      };
+
       await createFacilityAction(input);
-
       notify.success(`${formData.name} has been added successfully.`);
-
       setIsAddOpen(false);
       setImageFile(null);
       setLayoutImageFile(null);
       resetForm();
-
       router.refresh();
-    } catch (error) {
-      console.error(error);
-      notify.error("Failed to add facility. Please try again.");
+    } catch (err: any) {
+      notify.error(err?.message || "Failed to add facility. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -232,55 +246,76 @@ export function FacilitiesManagement({
 
     const validation = validateForm();
     if (!validation.isValid) {
-      const msg =
+      notify.error(
         "Please fill in all required fields: " +
-        validation.missingFields.join(", ");
-      notify.error(msg);
+          validation.missingFields.join(", ")
+      );
       return;
     }
 
-    const existingPhotos = (editingFacility as any).photos ?? [];
-
-    const imageUrl = imageFile
-      ? URL.createObjectURL(imageFile)
-      : existingPhotos[0] ??
-        editingFacility.image ??
-        `/placeholder.svg?height=400&width=600&query=${formData.type} facility`;
-
-    const layoutImageUrl = layoutImageFile
-      ? URL.createObjectURL(layoutImageFile)
-      : existingPhotos[1] ??
-        editingFacility.layoutImage ??
-        `/placeholder.svg?height=400&width=600&query=${formData.type} court layout`;
-
-    const input: FacilityInput = {
-      id: editingFacility?.id,
-      name: formData.name,
-      type: formData.type,
-      location: formData.location,
-      locationType: formData.locationType,
-      description: formData.description,
-      capacity: formData.capacity,
-      openTime: formData.operatingStart,
-      closeTime: formData.operatingEnd,
-      isMultiSport: formData.isMultiSport,
-      sharedSports: formData.isMultiSport ? formData.supportedSports : [],
-      numberOfCourts: formData.numberOfCourts,
-      rules: formData.rules,
-      photos: [imageUrl, layoutImageUrl],
-      active: formData.status === "active",
-    };
-
     try {
+      const existingPhotos = (editingFacility as any).photos ?? [];
+      let coverUrl = existingPhotos[0] ?? editingFacility.image;
+      let layoutUrl = existingPhotos[1] ?? editingFacility.layoutImage;
+
+      const folder = `facility_${editingFacility.id}`;
+      if (imageFile) coverUrl = await uploadFacilityImage(imageFile, folder);
+      if (layoutImageFile)
+        layoutUrl = await uploadFacilityImage(layoutImageFile, folder);
+
+      const input: FacilityInput = {
+        id: editingFacility.id,
+        name: formData.name,
+        type: formData.type,
+        location: formData.location,
+        locationType: formData.locationType,
+        description: formData.description,
+        capacity: formData.capacity,
+        openTime: formData.operatingStart,
+        closeTime: formData.operatingEnd,
+        isMultiSport: formData.isMultiSport,
+        sharedSports: formData.isMultiSport ? formData.supportedSports : [],
+        numberOfCourts: formData.numberOfCourts,
+        rules: formData.rules,
+        photos: [coverUrl, layoutUrl].filter(Boolean) as string[],
+        active: formData.status === "active",
+      };
+
       await updateFacilityAction(input);
 
-      notify.success(`${formData.name} has been updated successfully.`);
+      setFacilities((prev) =>
+        prev.map((f) =>
+          f.id === editingFacility.id
+            ? {
+                ...f,
+                name: input.name,
+                type: input.type as SportType,
+                location: input.location,
+                locationType: input.locationType as LocationType,
+                description: input.description ?? "",
+                capacity: input.capacity ?? null,
+                openTime: input.openTime, // set directly
+                closeTime: input.closeTime, // set directly
+                isMultiSport: !!input.isMultiSport,
+                numberOfCourts: input.numberOfCourts ?? f.numberOfCourts,
+                courts:
+                  input.isMultiSport && input.sharedSports
+                    ? [{ supportedSports: input.sharedSports as SportType[] }]
+                    : f.courts,
+                rules: input.rules ?? f.rules,
+                image: input.photos?.[0] ?? f.image,
+                layoutImage: input.photos?.[1] ?? f.layoutImage,
+                status: input.active === false ? "inactive" : "active",
+              }
+            : f
+        )
+      );
 
+      notify.success(`${formData.name} has been updated successfully.`);
       setEditingFacility(null);
       setImageFile(null);
       setLayoutImageFile(null);
       resetForm();
-
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -290,12 +325,9 @@ export function FacilitiesManagement({
 
   const handleDelete = async () => {
     if (!deletingFacility) return;
-
     try {
       await deleteFacilityAction(deletingFacility.id);
-
       notify.success(`${deletingFacility.name} has been removed.`);
-
       setDeletingFacility(null);
       router.refresh();
     } catch (error) {
@@ -315,17 +347,14 @@ export function FacilitiesManagement({
           : f
       )
     );
-
     try {
       await toggleFacilityActiveAction(facility.id, nextActive);
-
       notify.success(
         `${facility.name} is now ${nextActive ? "active" : "inactive"}.`
       );
     } catch (error) {
       console.error(error);
       notify.error("Failed to update status. Please try again.");
-
       setFacilities((prev) =>
         prev.map((f) =>
           f.id === facility.id
@@ -354,25 +383,38 @@ export function FacilitiesManagement({
       rules: [],
     });
   };
+  const openEdit = async (row: Facility) => {
+    try {
+      const fresh = await getFacilityByIdAction(row.id);
+      const f = fresh ?? row; // fall back if server returns null
 
-  const openEdit = (facility: Facility) => {
-    setFormData({
-      name: facility.name,
-      type: facility.type,
-      location: facility.location,
-      locationType: facility.locationType,
-      description: facility.description,
-      capacity: facility.capacity,
-      operatingStart: facility.operatingHours.start,
-      operatingEnd: facility.operatingHours.end,
-      status: facility.status || "active",
-      numberOfCourts: facility.courts?.length || 1,
-      isMultiSport: facility.isMultiSport || false,
-      supportedSports: facility.courts?.[0]?.supportedSports || [facility.type],
-      availableEquipment: facility.availableEquipment || [],
-      rules: facility.rules || [],
-    });
-    setEditingFacility(facility);
+      setFormData({
+        name: f.name,
+        type: f.type,
+        location: f.location,
+        locationType: f.locationType,
+        description: f.description ?? "",
+        capacity: f.capacity ?? 0,
+        operatingStart: f.openTime ?? "08:00",
+        operatingEnd: f.closeTime ?? "22:00",
+        status: (f.status === "inactive" ? "inactive" : "active") as
+          | "active"
+          | "inactive",
+
+        numberOfCourts: f.numberOfCourts ?? (f.courts?.length || 1),
+        isMultiSport: f.isMultiSport || false,
+        supportedSports: f.courts?.[0]?.supportedSports || [f.type],
+        availableEquipment: f.availableEquipment || [],
+        rules: f.rules || [],
+      });
+
+      setImageFile(null);
+      setLayoutImageFile(null);
+      setEditingFacility(f as Facility);
+    } catch (e) {
+      console.error(e);
+      notify.error("Failed to load the latest facility data.");
+    }
   };
 
   return (
@@ -426,14 +468,12 @@ export function FacilitiesManagement({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <>
-                    <Badge
-                      variant="outline"
-                      className={getSportTypeColor(facility.type)}
-                    >
-                      {facility.type}
-                    </Badge>
-                  </>
+                  <Badge
+                    variant="outline"
+                    className={getSportTypeColor(facility.type)}
+                  >
+                    {facility.type}
+                  </Badge>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -444,7 +484,7 @@ export function FacilitiesManagement({
                   <div>
                     <p className="text-muted-foreground">Courts</p>
                     <p className="font-medium">
-                      {facility.courts?.length || 0}
+                      {facility.numberOfCourts ?? facility.courts?.length ?? 0}
                     </p>
                   </div>
                   <div>
@@ -469,8 +509,8 @@ export function FacilitiesManagement({
                   <div>
                     <p className="text-muted-foreground">Hours</p>
                     <p className="font-medium text-xs">
-                      {facility.operatingHours.start} -{" "}
-                      {facility.operatingHours.end}
+                      {facility.openTime ?? "08:00"} -{" "}
+                      {facility.closeTime ?? "22:00"}
                     </p>
                   </div>
                 </div>
@@ -503,33 +543,15 @@ export function FacilitiesManagement({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Name
-              </TableHead>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Type
-              </TableHead>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Location
-              </TableHead>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Capacity
-              </TableHead>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Courts
-              </TableHead>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Equipment
-              </TableHead>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Hours
-              </TableHead>
-              <TableHead className="font-bold text-gray-900 dark:text-gray-100">
-                Status
-              </TableHead>
-              <TableHead className="text-right font-bold text-gray-900 dark:text-gray-100">
-                Actions
-              </TableHead>
+              <TableHead className="font-bold">Name</TableHead>
+              <TableHead className="font-bold">Type</TableHead>
+              <TableHead className="font-bold">Location</TableHead>
+              <TableHead className="font-bold">Capacity</TableHead>
+              <TableHead className="font-bold">Courts</TableHead>
+              <TableHead className="font-bold">Equipment</TableHead>
+              <TableHead className="font-bold">Hours</TableHead>
+              <TableHead className="font-bold">Status</TableHead>
+              <TableHead className="text-right font-bold">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -539,7 +561,6 @@ export function FacilitiesManagement({
                 <TableCell>
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-wrap gap-1">
-                      {/* Always show the primary sport type from DB */}
                       <Badge
                         variant="outline"
                         className={getSportTypeColor(facility.type)}
@@ -550,15 +571,17 @@ export function FacilitiesManagement({
                     {facility.isMultiSport &&
                     facility.courts?.[0]?.supportedSports?.length ? (
                       <div className="flex flex-wrap gap-1">
-                        {facility.courts[0].supportedSports!.map((sport) => (
-                          <Badge
-                            key={sport}
-                            variant="outline"
-                            className={`text-xs ${getSportTypeColor(sport)}`}
-                          >
-                            {sport}
-                          </Badge>
-                        ))}
+                        {facility.courts[0].supportedSports!.map(
+                          (sport: SportType) => (
+                            <Badge
+                              key={sport}
+                              variant="outline"
+                              className={`text-xs ${getSportTypeColor(sport)}`}
+                            >
+                              {sport}
+                            </Badge>
+                          )
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -572,7 +595,9 @@ export function FacilitiesManagement({
                   </div>
                 </TableCell>
                 <TableCell>{facility.capacity}</TableCell>
-                <TableCell>{facility.courts?.length || 0}</TableCell>
+                <TableCell>
+                  {facility.numberOfCourts ?? facility.courts?.length ?? 0}
+                </TableCell>
                 <TableCell>
                   {facility.availableEquipment &&
                   facility.availableEquipment.length > 0 ? (
@@ -592,9 +617,10 @@ export function FacilitiesManagement({
                   )}
                 </TableCell>
                 <TableCell className="text-sm">
-                  {facility.operatingHours.start} -{" "}
-                  {facility.operatingHours.end}
+                  {formatTime(facility.openTime)} -{" "}
+                  {formatTime(facility.closeTime)}
                 </TableCell>
+
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Switch
@@ -640,7 +666,10 @@ export function FacilitiesManagement({
           open={!!editingFacility}
           onOpenChange={() => setEditingFacility(null)}
         >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent
+            key={editingFacility.id}
+            className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          >
             <DialogHeader>
               <DialogTitle>Edit Facility</DialogTitle>
             </DialogHeader>
@@ -760,7 +789,6 @@ function FacilityForm({
 
   const addEquipment = () => {
     if (!selectedEquipmentId) return;
-
     if (
       formData.availableEquipment?.some(
         (eq: AvailableEquipment) => eq.equipmentId === selectedEquipmentId
@@ -768,12 +796,10 @@ function FacilityForm({
     ) {
       return;
     }
-
     const newEquipment: AvailableEquipment = {
       equipmentId: selectedEquipmentId,
       quantity: equipmentQuantity,
     };
-
     setFormData({
       ...formData,
       availableEquipment: [
@@ -781,7 +807,6 @@ function FacilityForm({
         newEquipment,
       ],
     });
-
     setSelectedEquipmentId("");
     setEquipmentQuantity(1);
   };
@@ -797,12 +822,10 @@ function FacilityForm({
 
   const addRule = () => {
     if (!newRule.trim()) return;
-
     setFormData({
       ...formData,
       rules: [...(formData.rules || []), newRule.trim()],
     });
-
     setNewRule("");
   };
 
@@ -846,7 +869,7 @@ function FacilityForm({
                 ? "Other"
                 : sports.includes(formData.type)
                 ? formData.type
-                : "" // none selected yet
+                : ""
             }
             onValueChange={handleSportTypeChange}
           >
@@ -868,7 +891,7 @@ function FacilityForm({
                   No existing facilities yet
                 </div>
               ) : (
-                sports.map((sport) => (
+                sports.map((sport: SportType) => (
                   <SelectItem key={sport} value={sport}>
                     {sport}
                   </SelectItem>
@@ -916,7 +939,7 @@ function FacilityForm({
               Supported Sports (select all that apply)
             </Label>
             <div className="grid grid-cols-2 gap-2">
-              {sports.map((sport) => (
+              {sports.map((sport: SportType) => (
                 <div key={sport} className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1218,7 +1241,10 @@ function FacilityForm({
           <Select
             value={formData.status}
             onValueChange={(value) =>
-              setFormData({ ...formData, status: value })
+              setFormData({
+                ...formData,
+                status: value as "active" | "inactive",
+              })
             }
           >
             <SelectTrigger
@@ -1230,7 +1256,7 @@ function FacilityForm({
             <SelectContent>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">
-                Inactive (Maintenance/Renovation)
+                Inactive (Maintenance or Renovation)
               </SelectItem>
             </SelectContent>
           </Select>
