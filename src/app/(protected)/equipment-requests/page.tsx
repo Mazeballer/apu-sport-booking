@@ -23,12 +23,18 @@ export default async function EquipmentRequestsPage() {
     redirect("/login");
   }
 
-  // Fetch all equipment requests for bookings made by this user
+  const MAX_REQUESTS = 50;
+
   const dbRequests = await prisma.equipmentRequest.findMany({
     where: {
+      // only requests for this user
       booking: {
         userId: user.id,
+        // and only for bookings that are still active
+        status: { in: ["confirmed", "rescheduled"] },
       },
+      // and only requests that still need action
+      status: { in: ["pending", "approved"] },
     },
     include: {
       booking: {
@@ -45,6 +51,7 @@ export default async function EquipmentRequestsPage() {
     orderBy: {
       createdAt: "desc",
     },
+    take: MAX_REQUESTS,
   });
 
   const requests: EquipmentRequestForUI[] = dbRequests.map((req) => ({

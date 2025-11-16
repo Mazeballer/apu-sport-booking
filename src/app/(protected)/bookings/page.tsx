@@ -264,6 +264,16 @@ export default async function BookingsPage() {
       data: { status: "cancelled" },
     });
 
+    await prisma.equipmentRequest.updateMany({
+      where: {
+        bookingId: booking.id,
+        status: { in: ["pending", "approved"] },
+      },
+      data: {
+        status: "done",
+      },
+    });
+
     revalidatePath("/bookings");
   }
 
