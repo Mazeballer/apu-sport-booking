@@ -8,7 +8,7 @@ datasource db {
 }
 
 /// ===========================
-/// Core
+/// Users
 /// ===========================
 model User {
   id        String             @id @default(uuid())
@@ -18,6 +18,7 @@ model User {
   updatedAt DateTime           @updatedAt
   name      String             @default("")
   authId    String?            @unique
+
   bookings  Booking[]
   decisions EquipmentRequest[] @relation("Decider")
   pushSubs  PushSubscription[]
@@ -29,18 +30,18 @@ model User {
 model Facility {
   id             String      @id @default(uuid())
   name           String
-  type           String                      // Main sport type
+  type           String
   location       String
   locationType   String      @default("Indoor")
   description    String?
   capacity       Int         @default(0)
-  openTime       String?                     // e.g. "07:00"
-  closeTime      String?                     // e.g. "22:00"
-  rules          String?                     // stored as newline-separated
-  photos         String[]                    // [facilityImage, layoutImage]
+  openTime       String?
+  closeTime      String?
+  rules          String?
+  photos         String[]
   active         Boolean     @default(true)
   isMultiSport   Boolean     @default(false)
-  sharedSports   String[]    @default([])     // if isMultiSport = true
+  sharedSports   String[]    @default([])
   numberOfCourts Int         @default(1)
   createdAt      DateTime    @default(now())
 
@@ -50,7 +51,7 @@ model Facility {
 }
 
 /// ===========================
-/// Spaces (Courts)
+/// Courts
 /// ===========================
 model Court {
   id         String    @id @default(uuid())
@@ -69,30 +70,29 @@ model Court {
 /// Bookings
 /// ===========================
 model Booking {
-  id         String      @id @default(uuid())
+  id         String        @id @default(uuid())
   userId     String
   facilityId String
   courtId    String
-  sportName  String?                     // e.g. "Basketball" or "Futsal"
-  start      DateTime     @db.Timestamptz(6)
-  end        DateTime     @db.Timestamptz(6)
-  status     BookingStatus @default(confirmed)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  start      DateTime       @db.Timestamptz(6)
+  end        DateTime       @db.Timestamptz(6)
+  status     BookingStatus  @default(confirmed)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
-  facility   Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  court      Court     @relation(fields: [courtId], references: [id], onDelete: Cascade)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facility   Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  court      Court          @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   equipmentRequests EquipmentRequest[]
 
-  @@unique([courtId, start, end])
   @@index([facilityId, start])
   @@index([courtId, start])
   @@index([userId, start])
 }
 
 /// ===========================
-/// Equipment & Requests
+/// Equipment
 /// ===========================
 model Equipment {
   id           String   @id @default(uuid())
@@ -100,7 +100,6 @@ model Equipment {
   name         String
   qtyTotal     Int
   qtyAvailable Int
-  notes        String?
 
   facility     Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   requestItems EquipmentRequestItem[]
@@ -108,36 +107,52 @@ model Equipment {
   @@index([facilityId, name])
 }
 
+/// ===========================
+/// Equipment Requests
+/// ===========================
 model EquipmentRequest {
-  id        String                 @id @default(uuid())
-  bookingId String
-  status    EquipReqStatus         @default(pending)
-  decidedBy String?
-  decidedAt DateTime?
-  note      String?
-  createdAt DateTime               @default(now())
+  id         String         @id @default(uuid())
+  bookingId  String
+  status     EquipReqStatus @default(pending) // pending → approved/denied → done
+  decidedBy  String?
+  decidedAt  DateTime?
+  note       String?
+  createdAt  DateTime       @default(now())
+  returnedAt DateTime?      // when everything returned or resolved
 
-  booking   Booking                @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  decider   User?                  @relation("Decider", fields: [decidedBy], references: [id])
-  items     EquipmentRequestItem[]
+  booking    Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  decider    User?          @relation("Decider", fields: [decidedBy], references: [id])
+  items      EquipmentRequestItem[]
 
   @@index([status, createdAt])
 }
 
+/// ===========================
+/// Equipment Request Items
+/// ===========================
 model EquipmentRequestItem {
-  id          String           @id @default(uuid())
+  id          String                 @id @default(uuid())
   requestId   String
   equipmentId String
-  qty         Int
 
-  equipment   Equipment        @relation(fields: [equipmentId], references: [id])
-  request     EquipmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  qty         Int
+  qtyReturned Int                    @default(0)
+
+  issuedAt    DateTime?              // used for overdue
+  dismissed   Boolean                @default(false) // hide from admin status list
+
+  condition   EquipReturnCondition?  // good, damaged, lost, not_returned
+  damageNotes String?
+
+  equipment   Equipment              @relation(fields: [equipmentId], references: [id])
+  request     EquipmentRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@unique([requestId, equipmentId])
+  @@index([equipmentId])
 }
 
 /// ===========================
-/// PWA Push Subscriptions
+/// Push Subscriptions
 /// ===========================
 model PushSubscription {
   id        String   @id @default(uuid())
@@ -168,9 +183,15 @@ enum BookingStatus {
 }
 
 enum EquipReqStatus {
-  pending
-  approved
-  denied
-  issued
-  returned
+  pending   // student requested equipment during booking
+  approved  // staff approved request
+  denied    // rejected by staff
+  done      // all items returned/resolved
+}
+
+enum EquipReturnCondition {
+  good         // fully returned
+  damaged      // returned but damaged
+  lost         // not returned, confirmed lost
+  not_returned // overdue
 }

@@ -1,4 +1,4 @@
-// app/facilities/[id]/book/page.tsx
+// app/(protected)/facility/[id]/book/page.tsx
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -12,17 +12,92 @@ export const revalidate = 0;
 export default async function BookFacilityPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
+
+  // Base facility
   const row = await prisma.facility.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       courts: { where: { active: true }, orderBy: { name: "asc" } },
       equipment: true,
-      bookings: { where: { facilityId: params.id }, orderBy: { start: "asc" } },
     },
   });
+
   if (!row) notFound();
+
+  // 1) Find all facilities that share availability with this one
+  // - this facility itself
+  // - facilities whose sharedSports contains this facility type
+  // - facilities whose type is in this facility sharedSports
+  const orConditions: any[] = [{ id: row.id }];
+
+  orConditions.push({
+    sharedSports: { has: row.type },
+  });
+
+  if (row.sharedSports.length > 0) {
+    orConditions.push({
+      type: { in: row.sharedSports },
+    });
+  }
+
+  const relatedFacilities = await prisma.facility.findMany({
+    where: {
+      OR: orConditions,
+    },
+    select: { id: true },
+  });
+
+  const sharedFacilityIds = relatedFacilities.map((f) => f.id);
+
+  // 2) Load courts for all related facilities
+  const allCourts = await prisma.court.findMany({
+    where: {
+      facilityId: { in: sharedFacilityIds },
+      active: true,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const currentFacilityCourts = allCourts.filter(
+    (c) => c.facilityId === row.id
+  );
+
+  // Build a mapping from any shared court id to this facility's court id
+  // Match by name and assume shared facilities have same court naming
+  const sharedCourtIdToCurrentCourtId: Record<string, string> = {};
+
+  currentFacilityCourts.forEach((currentCourt) => {
+    const sameNameCourts = allCourts.filter(
+      (c) => c.name === currentCourt.name
+    );
+
+    sameNameCourts.forEach((c) => {
+      sharedCourtIdToCurrentCourtId[c.id] = currentCourt.id;
+    });
+  });
+
+  // 3) Fetch bookings for all shared facilities
+  const bookings = await prisma.booking.findMany({
+    where: {
+      facilityId: { in: sharedFacilityIds },
+      status: { in: ["confirmed", "rescheduled"] },
+    },
+    orderBy: { start: "asc" },
+  });
+
+  // 4) Remap bookings so that courts from other facilities
+  // map to this facility's court ids, by name
+  const existingBookings = bookings.map((b) => ({
+    id: b.id,
+    facilityId: b.facilityId,
+    courtId: sharedCourtIdToCurrentCourtId[b.courtId] ?? b.courtId,
+    start: b.start,
+    end: b.end,
+    status: b.status,
+  }));
 
   const facility = {
     id: row.id,
@@ -36,7 +111,10 @@ export default async function BookFacilityPage({
     openTime: row.openTime,
     closeTime: row.closeTime,
     rules: row.rules,
-    courts: row.courts.map((c) => ({ id: c.id, name: c.name })),
+    courts: row.courts.map((c) => ({
+      id: c.id,
+      name: c.name,
+    })),
   };
 
   const equipment = row.equipment.map((e) => ({
@@ -46,15 +124,7 @@ export default async function BookFacilityPage({
     qtyTotal: e.qtyTotal,
   }));
 
-  const existingBookings = row.bookings.map((b) => ({
-    id: b.id,
-    facilityId: b.facilityId,
-    courtId: b.courtId,
-    start: b.start,
-    end: b.end,
-    status: b.status,
-  }));
-
+  // server action that matches BookingFlow onCreateBooking
   async function createBooking(payload: {
     facilityId: string;
     courtId: string;
@@ -64,13 +134,14 @@ export default async function BookFacilityPage({
     notes?: string;
   }) {
     "use server";
+
     const user = await getCurrentUser();
     if (!user) throw new Error("Unauthorized");
 
     const start = new Date(payload.startISO);
     const end = new Date(payload.endISO);
 
-    // verify the court belongs to the facility and is free
+    // 1) verify court belongs to this facility and is active
     const belongs = await prisma.court.findFirst({
       where: {
         id: payload.courtId,
@@ -81,6 +152,7 @@ export default async function BookFacilityPage({
     });
     if (!belongs) throw new Error("Invalid court");
 
+    // 2) check for overlap on that court
     const clash = await prisma.booking.findFirst({
       where: {
         courtId: payload.courtId,
@@ -91,6 +163,7 @@ export default async function BookFacilityPage({
     });
     if (clash) throw new Error("This court is already booked for that time");
 
+    // 3) create booking
     const booking = await prisma.booking.create({
       data: {
         userId: user.id,
@@ -102,11 +175,13 @@ export default async function BookFacilityPage({
       },
     });
 
+    // 4) optional equipment request
     if (payload.equipmentIds.length > 0) {
       await prisma.equipmentRequest.create({
         data: {
           bookingId: booking.id,
           status: "pending",
+          note: payload.notes,
           items: {
             create: payload.equipmentIds.map((eid) => ({
               equipmentId: eid,
@@ -117,7 +192,7 @@ export default async function BookFacilityPage({
       });
     }
 
-    revalidatePath(`/facilities/${payload.facilityId}/book`);
+    revalidatePath(`/facility/${payload.facilityId}/book`);
   }
 
   return (

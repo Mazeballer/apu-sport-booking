@@ -14,10 +14,12 @@ export const revalidate = 0;
 export default async function FacilityPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
+
   const facility = await prisma.facility.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       equipment: true,
     },

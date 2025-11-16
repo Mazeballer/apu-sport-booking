@@ -1,16 +1,21 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useMemo } from 'react';
-import { createBrowserClient } from '@/lib/supabase/client';
-import { cn } from '@/lib/utils';
+import { useEffect, useState, useMemo } from "react";
+import { createBrowserClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { PackageIcon } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { PackageIcon } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 type Facility = { id: string; name: string };
 type EquipmentRow = {
@@ -21,18 +26,20 @@ type EquipmentRow = {
   qtyAvailable: number;
 };
 
-function getAvailabilityVariant(percent: number): 'success' | 'warning' | 'danger' | 'critical' {
-  if (percent >= 70) return 'success';
-  if (percent >= 40) return 'warning';
-  if (percent >= 10) return 'danger';
-  return 'critical';
+function getAvailabilityVariant(
+  percent: number
+): "success" | "warning" | "danger" | "critical" {
+  if (percent >= 70) return "success";
+  if (percent >= 40) return "warning";
+  if (percent >= 10) return "danger";
+  return "critical";
 }
 
 function getAvailabilityTextColor(percent: number): string {
-  if (percent >= 70) return 'text-emerald-700 dark:text-emerald-400';
-  if (percent >= 40) return 'text-amber-700 dark:text-amber-400';
-  if (percent >= 10) return 'text-orange-700 dark:text-orange-400';
-  return 'text-rose-600 dark:text-rose-400';
+  if (percent >= 70) return "text-emerald-700 dark:text-emerald-400";
+  if (percent >= 40) return "text-amber-700 dark:text-amber-400";
+  if (percent >= 10) return "text-orange-700 dark:text-orange-400";
+  return "text-rose-600 dark:text-rose-400";
 }
 
 export function InventoryList({
@@ -55,10 +62,10 @@ export function InventoryList({
   useEffect(() => {
     const supabase = createBrowserClient();
     const channel = supabase
-      .channel('realtime-equipment')
+      .channel("realtime-equipment")
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'Equipment' },
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Equipment" },
         (payload) => {
           const newRec = payload.new as EquipmentRow | undefined;
           const oldRec = payload.old as EquipmentRow | undefined;
@@ -66,15 +73,15 @@ export function InventoryList({
           setRows((prev) => {
             let updated = [...prev];
             switch (payload.eventType) {
-              case 'INSERT':
+              case "INSERT":
                 if (!newRec) break;
                 updated.push(newRec);
                 break;
-              case 'UPDATE':
+              case "UPDATE":
                 if (!newRec) break;
                 updated = updated.map((r) => (r.id === newRec.id ? newRec : r));
                 break;
-              case 'DELETE':
+              case "DELETE":
                 if (!oldRec) break;
                 updated = updated.filter((r) => r.id !== oldRec.id);
                 break;
@@ -108,9 +115,10 @@ export function InventoryList({
           <TableBody>
             {rows.map((eq) => {
               const facilityName = eq.facilityId
-                ? facilityNameById.get(eq.facilityId) ?? '—'
-                : '—';
-              const percent = eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
+                ? facilityNameById.get(eq.facilityId) ?? "—"
+                : "—";
+              const percent =
+                eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
 
               return (
                 <TableRow key={eq.id}>
@@ -125,16 +133,23 @@ export function InventoryList({
                     <Badge
                       variant={
                         eq.qtyAvailable === 0
-                          ? 'destructive'
+                          ? "destructive"
                           : eq.qtyAvailable < 3
-                          ? 'secondary'
-                          : 'default'
+                          ? "secondary"
+                          : "default"
                       }
                     >
                       {eq.qtyAvailable}
                     </Badge>
                   </TableCell>
-                  <TableCell>{eq.qtyTotal}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="default"
+                      className="bg-primary text-white rounded-full"
+                    >
+                      {eq.qtyTotal}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Progress
@@ -144,7 +159,7 @@ export function InventoryList({
                       />
                       <span
                         className={cn(
-                          'text-sm font-medium',
+                          "text-sm font-medium",
                           getAvailabilityTextColor(percent)
                         )}
                       >
@@ -163,9 +178,10 @@ export function InventoryList({
       <div className="md:hidden space-y-4">
         {rows.map((eq) => {
           const facilityName = eq.facilityId
-            ? facilityNameById.get(eq.facilityId) ?? '—'
-            : '—';
-          const percent = eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
+            ? facilityNameById.get(eq.facilityId) ?? "—"
+            : "—";
+          const percent =
+            eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
 
           return (
             <Card key={eq.id} className="p-4">
@@ -176,7 +192,9 @@ export function InventoryList({
                   </div>
                   <div className="flex-1">
                     <h3 className="font-bold">{eq.name}</h3>
-                    <p className="text-sm text-muted-foreground">{facilityName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {facilityName}
+                    </p>
                   </div>
                 </div>
 
@@ -188,10 +206,10 @@ export function InventoryList({
                     <Badge
                       variant={
                         eq.qtyAvailable === 0
-                          ? 'destructive'
+                          ? "destructive"
                           : eq.qtyAvailable < 3
-                          ? 'secondary'
-                          : 'default'
+                          ? "secondary"
+                          : "default"
                       }
                     >
                       {eq.qtyAvailable}
@@ -199,7 +217,12 @@ export function InventoryList({
                   </div>
                   <div>
                     <p className="text-muted-foreground mb-1">Total Stock</p>
-                    <p className="font-medium">{eq.qtyTotal}</p>
+                    <Badge
+                      variant="default"
+                      className="bg-primary text-white rounded-full"
+                    >
+                      {eq.qtyTotal}
+                    </Badge>
                   </div>
                 </div>
 
@@ -208,7 +231,7 @@ export function InventoryList({
                     <span className="text-muted-foreground">Availability</span>
                     <span
                       className={cn(
-                        'font-medium',
+                        "font-medium",
                         getAvailabilityTextColor(percent)
                       )}
                     >

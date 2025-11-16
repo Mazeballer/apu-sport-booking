@@ -25,7 +25,7 @@ import {
   PackageIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useToast } from "@/hooks/use-toast";
+import { notify } from "@/lib/toast";
 
 type BookingUI = {
   id: string;
@@ -45,7 +45,7 @@ interface BookingFlowProps {
     locationType: string;
     description?: string | null;
     capacity?: number | null;
-    photos?: string[]; // [facilityImage, layoutImage]
+    photos?: string[];
     openTime?: string | null; // "07:00"
     closeTime?: string | null; // "22:00"
     rules?: string[] | string | null;
@@ -75,7 +75,6 @@ export function BookingFlow({
   onCreateBooking,
 }: BookingFlowProps) {
   const router = useRouter();
-  const { toast } = useToast();
 
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedDuration, setSelectedDuration] = useState<1 | 2>();
@@ -98,14 +97,32 @@ export function BookingFlow({
   };
   const currentStep = getCurrentStep();
 
-  const timeSlots = useMemo(() => {
+  // Base hourly slots from open time to one hour before close time
+  const baseTimeSlots = useMemo(() => {
     const slots: string[] = [];
     const startH = Number((facility.openTime ?? "07:00").split(":")[0]);
     const endH = Number((facility.closeTime ?? "22:00").split(":")[0]);
-    for (let h = startH; h < endH; h++)
+    for (let h = startH; h < endH; h += 1) {
       slots.push(`${String(h).padStart(2, "0")}:00`);
+    }
     return slots;
   }, [facility.openTime, facility.closeTime]);
+
+  // When duration is 2 hours, do not offer the last hour before closing
+  // Example: open 07:00, close 22:00
+  // duration 1 hour  last slot 21:00
+  // duration 2 hours last slot 20:00
+  const selectableTimeSlots = useMemo(() => {
+    if (!selectedDuration) return baseTimeSlots;
+
+    const endH = Number((facility.closeTime ?? "22:00").split(":")[0]);
+    const latestStartHour = endH - selectedDuration;
+
+    return baseTimeSlots.filter((time) => {
+      const hour = Number(time.split(":")[0]);
+      return hour <= latestStartHour;
+    });
+  }, [baseTimeSlots, selectedDuration, facility.closeTime]);
 
   // Utilities for overlap
   const buildDateAtTime = (date: Date, hhmm: string) => {
@@ -114,11 +131,13 @@ export function BookingFlow({
     d.setHours(hh, mm, 0, 0);
     return d;
   };
+
   const addHours = (d: Date, hours: number) => {
     const x = new Date(d);
     x.setHours(x.getHours() + hours);
     return x;
   };
+
   const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
     aStart < bEnd && aEnd > bStart;
 
@@ -140,7 +159,7 @@ export function BookingFlow({
     if (!selectedDate || !selectedDuration) return false;
     const slotStart = buildDateAtTime(selectedDate, slot);
     const slotEnd = addHours(slotStart, selectedDuration);
-    // for each court, check if it is free
+
     const freeCourtExists = facility.courts.some((c) => {
       const clashes = dayBookings.some(
         (b) =>
@@ -162,7 +181,6 @@ export function BookingFlow({
 
     const status: Record<string, "available" | "unavailable" | "elapsed"> = {};
     facility.courts.forEach((c) => {
-      // elapsed check only if same day and slot start is before now
       if (isToday && slotStart.getHours() < currentHour) {
         status[c.id] = "elapsed";
         return;
@@ -185,7 +203,10 @@ export function BookingFlow({
 
   // Availability dialog table needs per court per slot
   const generateAvailabilityData = () => {
-    if (!selectedDate || !selectedDuration) return [];
+    if (!selectedDate) return [];
+
+    const effectiveDuration = selectedDuration ?? 1;
+
     return facility.courts.map((court) => {
       const availability: Record<
         string,
@@ -195,9 +216,10 @@ export function BookingFlow({
       const isToday = selectedDate.toDateString() === now.toDateString();
       const nowHour = now.getHours();
 
-      timeSlots.forEach((slot) => {
+      baseTimeSlots.forEach((slot) => {
         const start = buildDateAtTime(selectedDate, slot);
-        const end = addHours(start, selectedDuration);
+        const end = addHours(start, effectiveDuration);
+
         if (isToday && start.getHours() < nowHour) {
           availability[slot] = "elapsed";
         } else {
@@ -234,14 +256,13 @@ export function BookingFlow({
       notes: equipmentNotes || undefined,
     });
 
-    toast({
-      title: "Booking Confirmed",
-      description: `${
+    notify.success(
+      `Booking confirmed for ${
         facility.name
-      } on ${selectedDate.toLocaleDateString()} at ${selectedTime}`,
-    });
+      } on ${selectedDate?.toLocaleDateString()} at ${selectedTime}`
+    );
 
-    router.push("/bookings");
+    router.push("/");
   };
 
   const handleViewLayout = () => {
@@ -472,7 +493,7 @@ export function BookingFlow({
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
-                {timeSlots.map((time) => {
+                {selectableTimeSlots.map((time) => {
                   const booked = selectedDuration
                     ? isSlotFullyBooked(time)
                     : false;
@@ -496,6 +517,15 @@ export function BookingFlow({
                   );
                 })}
               </div>
+
+              {currentStep === 3 &&
+                selectedDuration &&
+                selectableTimeSlots.length === 0 && (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    No valid start times available for this duration. Please
+                    choose another day or a shorter duration.
+                  </p>
+                )}
             </CardContent>
           </Card>
 
@@ -783,7 +813,7 @@ export function BookingFlow({
                     <div className="w-24 md:w-40 flex-shrink-0 p-2 md:p-3 font-semibold border-r sticky left-0 bg-muted/50 z-10 text-xs md:text-sm">
                       Court
                     </div>
-                    {timeSlots.map((slot) => (
+                    {baseTimeSlots.map((slot) => (
                       <div
                         key={slot}
                         className="w-16 md:w-24 flex-shrink-0 p-1.5 md:p-2 text-center font-medium text-xs"
@@ -801,7 +831,7 @@ export function BookingFlow({
                       <div className="w-24 md:w-40 flex-shrink-0 p-2 md:p-3 font-medium border-r sticky left-0 bg-background z-10 text-xs md:text-sm flex items-center">
                         {courtData.courtName}
                       </div>
-                      {timeSlots.map((slot) => {
+                      {baseTimeSlots.map((slot) => {
                         const status = courtData.availability[slot];
                         return (
                           <div

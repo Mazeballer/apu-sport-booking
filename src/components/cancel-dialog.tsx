@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import {
   AlertDialog,
@@ -9,66 +9,80 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { bookings, facilities } from "@/lib/data"
-import { useToast } from "@/hooks/use-toast"
+} from "@/components/ui/alert-dialog";
+import { notify } from "@/lib/toast";
 
 interface CancelDialogProps {
-  bookingId: string
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  booking: {
+    id: string;
+    facilityName: string;
+    startISO: string;
+  } | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+
+  // Parent will call server action or API here
+  onConfirm: () => Promise<void>;
 }
 
-export function CancelDialog({ bookingId, open, onOpenChange }: CancelDialogProps) {
-  const booking = bookings.find((b) => b.id === bookingId)
-  const facility = booking ? facilities.find((f) => f.id === booking.facilityId) : null
-  const { toast } = useToast()
+export function CancelDialog({
+  booking,
+  open,
+  onOpenChange,
+  onConfirm,
+}: CancelDialogProps) {
+  if (!booking) return null;
 
-  if (!booking || !facility) return null
+  const start = new Date(booking.startISO);
 
-  const handleCancel = () => {
-    // Update booking status (in real app, this would call an API)
-    booking.status = "cancelled"
+  const handleCancel = async () => {
+    try {
+      await onConfirm();
 
-    toast({
-      title: "Booking Cancelled",
-      description: (
-        <div className="mt-2 space-y-1">
-          <p className="font-semibold">{facility.name}</p>
-          <p className="text-sm">
-            {booking.date} at {booking.startTime}
-          </p>
-        </div>
-      ),
-      variant: "destructive",
-    })
+      const date = start.toLocaleDateString();
+      const time = start.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 
-    onOpenChange(false)
-  }
+      onOpenChange(false);
+    } catch (err) {
+      console.error(err);
+      notify.error("Please try again later.");
+    }
+  };
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Cancel Booking?</AlertDialogTitle>
+          <AlertDialogTitle>Cancel booking?</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to cancel your booking for <strong>{facility.name}</strong> on{" "}
-            <strong>{new Date(booking.date).toLocaleDateString()}</strong> at <strong>{booking.startTime}</strong>?
+            Are you sure you want to cancel your booking for{" "}
+            <strong>{booking.facilityName}</strong> on{" "}
+            <strong>{start.toLocaleDateString()}</strong> at{" "}
+            <strong>
+              {start.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </strong>
+            ?
             <br />
             <br />
             This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+          <AlertDialogCancel>Keep booking</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleCancel}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Yes, Cancel Booking
+            Yes, cancel booking
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
+  );
 }
