@@ -1,5 +1,3 @@
-// app/(protected)/staff/page.tsx
-
 import { prisma } from "@/lib/prisma";
 import { requireStaffOrAdmin } from "@/lib/authz";
 
@@ -7,7 +5,10 @@ import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { PendingRequestsQueue } from "@/components/staff/pending-requests-queue";
+import {
+  PendingRequestsQueue,
+  type PendingRequest,
+} from "@/components/staff/pending-requests-queue";
 import { IssueReturnFlow } from "@/components/staff/issue-return-flow";
 import { InventoryList } from "@/components/staff/inventory-list";
 import { BookingsCalendar } from "@/components/staff/bookings-calendar";
@@ -20,11 +21,15 @@ import {
 } from "lucide-react";
 
 export default async function StaffPage() {
-  // 1) Server-side auth: only staff/admin allowed
   await requireStaffOrAdmin();
 
-  // 2) Load facilities + equipment for the Inventory tab
-  const [facilities, equipment] = await Promise.all([
+  const [
+    facilities,
+    equipment,
+    pendingRequestRows,
+    approvedRequestRows,
+    issuedItemsRaw,
+  ] = await Promise.all([
     prisma.facility.findMany({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
@@ -36,12 +41,139 @@ export default async function StaffPage() {
         facilityId: true,
         qtyTotal: true,
         qtyAvailable: true,
+        facility: {
+          select: { name: true },
+        },
       },
       orderBy: { name: "asc" },
     }),
+    prisma.equipmentRequest.findMany({
+      where: { status: "pending" },
+      include: {
+        booking: {
+          include: {
+            user: true,
+            facility: true,
+          },
+        },
+        items: {
+          include: {
+            equipment: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.equipmentRequest.findMany({
+      where: { status: "approved" },
+      include: {
+        booking: {
+          include: {
+            user: true,
+            facility: true,
+          },
+        },
+        items: {
+          include: {
+            equipment: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+    prisma.equipmentRequestItem.findMany({
+      where: {
+        issuedAt: { not: null },
+        dismissed: false,
+      },
+      include: {
+        equipment: {
+          include: { facility: true },
+        },
+        request: {
+          include: {
+            booking: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { issuedAt: "desc" },
+      take: 100,
+    }),
   ]);
 
-  // 3) Render
+  const pendingRequests: PendingRequest[] = pendingRequestRows.map((req) => ({
+    id: req.id,
+    userEmail: req.booking.user.email,
+    facilityName: req.booking.facility.name,
+    requestDate: req.createdAt.toISOString(),
+    notes: req.note,
+    equipmentName:
+      req.items.length > 0
+        ? req.items.map((item) => `${item.equipment.name}`).join(", ")
+        : "No equipment items",
+  }));
+
+  // For IssueReturnFlow
+
+  const equipmentOptions = equipment.map((eq) => ({
+    id: eq.id,
+    name: eq.name,
+    qtyAvailable: eq.qtyAvailable,
+    qtyTotal: eq.qtyTotal,
+    facilityId: eq.facilityId,
+    facilityName: eq.facility.name,
+  }));
+
+  type ApprovedRequestRow = {
+    id: string;
+    userEmail: string;
+    facilityName: string;
+    items: {
+      equipmentId: string;
+      equipmentName: string;
+      qtyRequested: number;
+    }[];
+  };
+
+  const approvedRequests: ApprovedRequestRow[] = approvedRequestRows
+    .map((req) => {
+      const unissuedItems = req.items.filter((item) => item.issuedAt === null);
+
+      if (unissuedItems.length === 0) {
+        return null;
+      }
+
+      return {
+        id: req.id,
+        userEmail: req.booking.user.email,
+        facilityName: req.booking.facility.name,
+        items: unissuedItems.map((item) => ({
+          equipmentId: item.equipmentId,
+          equipmentName: item.equipment.name,
+          qtyRequested: item.qty,
+        })),
+      };
+    })
+    .filter((req): req is ApprovedRequestRow => req !== null);
+
+  const issuedItems = issuedItemsRaw
+    .filter((i) => i.qtyReturned < i.qty)
+    .map((item) => ({
+      id: item.id, // equipmentRequestItem id
+      requestId: item.requestId,
+      userEmail: item.request.booking.user.email,
+      equipmentId: item.equipmentId,
+      equipmentName: item.equipment.name,
+      facilityName: item.equipment.facility.name,
+      quantityBorrowed: item.qty,
+      quantityReturned: item.qtyReturned,
+    }));
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -98,7 +230,7 @@ export default async function StaffPage() {
                 </p>
               </CardHeader>
               <CardContent>
-                <PendingRequestsQueue />
+                <PendingRequestsQueue initialRequests={pendingRequests} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -112,7 +244,11 @@ export default async function StaffPage() {
                 </p>
               </CardHeader>
               <CardContent>
-                <IssueReturnFlow />
+                <IssueReturnFlow
+                  equipmentOptions={equipmentOptions}
+                  approvedRequests={approvedRequests}
+                  issuedItems={issuedItems}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -126,7 +262,6 @@ export default async function StaffPage() {
                 </p>
               </CardHeader>
               <CardContent>
-                {/* ✅ now InventoryList gets initial data from the server */}
                 <InventoryList facilities={facilities} equipment={equipment} />
               </CardContent>
             </Card>
@@ -137,7 +272,7 @@ export default async function StaffPage() {
               <CardHeader>
                 <CardTitle>Facility Bookings Calendar</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  View all facility bookings (read-only)
+                  View all facility bookings (read only)
                 </p>
               </CardHeader>
               <CardContent>

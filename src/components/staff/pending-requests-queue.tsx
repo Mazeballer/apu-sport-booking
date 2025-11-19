@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
-import { equipmentRequests } from '@/lib/data';
-import { Button } from '@/components/ui/button';
+import * as React from "react";
+import { useTransition } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -9,40 +10,92 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { CheckIcon, XIcon, PackageIcon, CalendarIcon } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { Separator } from '@/components/ui/separator';
-import { Card } from '@/components/ui/card';
+} from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import {
+  PackageIcon,
+  CalendarIcon,
+  MapPinIcon,
+  CheckIcon,
+  XIcon,
+} from "lucide-react";
+import { notify } from "@/lib/toast";
+import {
+  approveEquipmentRequest,
+  denyEquipmentRequest,
+} from "@/app/(protected)/staff/actions";
 
-export function PendingRequestsQueue() {
-  const { toast } = useToast();
-  const pendingRequests = equipmentRequests.filter(
-    (r) => r.status === 'pending'
-  );
+export type PendingRequest = {
+  id: string;
+  userEmail: string;
+  equipmentName: string;
+  facilityName: string;
+  requestDate: string;
+  notes: string | null;
+};
+
+type PendingRequestsQueueProps = {
+  initialRequests: PendingRequest[];
+};
+
+export function PendingRequestsQueue({
+  initialRequests,
+}: PendingRequestsQueueProps) {
+  const [pendingRequests, setPendingRequests] =
+    React.useState<PendingRequest[]>(initialRequests);
+  const [loadingId, setLoadingId] = React.useState<string | null>(null);
+
+  // useTransition so React knows this is a non urgent update
+  const [isPending, startTransition] = useTransition();
 
   const handleApprove = (requestId: string) => {
-    const request = equipmentRequests.find((r) => r.id === requestId);
-    if (request) {
-      request.status = 'approved';
-      toast({
-        title: 'Request Approved',
-        description: `${request.equipmentName} request for ${request.userEmail} has been approved.`,
-      });
-    }
+    const request = pendingRequests.find((r) => r.id === requestId);
+    if (!request) return;
+
+    startTransition(async () => {
+      try {
+        setLoadingId(requestId);
+
+        await approveEquipmentRequest(requestId);
+
+        // Optimistic update on the client side
+        setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+        notify.success("Equipment request approved");
+      } catch (error) {
+        console.error(error);
+        notify.error("Could not approve this request. Please try again.");
+      } finally {
+        setLoadingId(null);
+      }
+    });
   };
 
   const handleDeny = (requestId: string) => {
-    const request = equipmentRequests.find((r) => r.id === requestId);
-    if (request) {
-      request.status = 'denied';
-      toast({
-        title: 'Request Denied',
-        description: `${request.equipmentName} request for ${request.userEmail} has been denied.`,
-        variant: 'destructive',
-      });
-    }
+    const request = pendingRequests.find((r) => r.id === requestId);
+    if (!request) return;
+
+    startTransition(async () => {
+      try {
+        setLoadingId(requestId);
+
+        await denyEquipmentRequest(requestId);
+
+        setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+
+        notify.error("Equipment request denied");
+      } catch (error) {
+        console.error(error);
+
+        notify.error("Could not deny this request. Please try again.");
+      } finally {
+        setLoadingId(null);
+      }
+    });
   };
+
+  const isRowDisabled = (id: string) => loadingId === id || isPending;
 
   if (pendingRequests.length === 0) {
     return (
@@ -50,9 +103,9 @@ export function PendingRequestsQueue() {
         <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
           <CheckIcon className="w-8 h-8 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold mb-2">All caught up!</h3>
+        <h3 className="text-lg font-semibold mb-2">All caught up</h3>
         <p className="text-muted-foreground">
-          No pending equipment requests at the moment
+          No pending equipment requests at the moment.
         </p>
       </div>
     );
@@ -68,7 +121,7 @@ export function PendingRequestsQueue() {
               <TableHead>Student</TableHead>
               <TableHead>Equipment</TableHead>
               <TableHead>Facility</TableHead>
-              <TableHead>Request Date</TableHead>
+              <TableHead>Request date</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -85,10 +138,16 @@ export function PendingRequestsQueue() {
                     <span className="font-medium">{request.equipmentName}</span>
                   </div>
                 </TableCell>
-                <TableCell>{request.facilityName}</TableCell>
+                <TableCell>
+                  {" "}
+                  <div className="flex items-center gap-2">
+                    <MapPinIcon className="h-4 w-4 text-primary" />
+                    <p className="font-medium">{request.facilityName}</p>
+                  </div>
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    <CalendarIcon className="h-4 w-4 text-primary" />
                     {new Date(request.requestDate).toLocaleDateString()}
                   </div>
                 </TableCell>
@@ -108,6 +167,7 @@ export function PendingRequestsQueue() {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={isRowDisabled(request.id)}
                       onClick={() => handleApprove(request.id)}
                       className="text-green-600 hover:text-green-700"
                     >
@@ -117,6 +177,7 @@ export function PendingRequestsQueue() {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={isRowDisabled(request.id)}
                       onClick={() => handleDeny(request.id)}
                       className="text-destructive hover:text-destructive"
                     >
@@ -154,14 +215,14 @@ export function PendingRequestsQueue() {
                   <span className="font-medium">{request.userEmail}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Request Date</span>
+                  <span className="text-muted-foreground">Request date</span>
                   <span className="font-medium">
                     {new Date(request.requestDate).toLocaleDateString()}
                   </span>
                 </div>
                 {request.notes && (
                   <div>
-                    <span className="text-muted-foreground">Notes:</span>
+                    <span className="text-muted-foreground">Notes</span>
                     <p className="mt-1">{request.notes}</p>
                   </div>
                 )}
@@ -173,6 +234,7 @@ export function PendingRequestsQueue() {
                 <Button
                   variant="outline"
                   className="flex-1 text-green-600 hover:text-green-700 bg-transparent"
+                  disabled={isRowDisabled(request.id)}
                   onClick={() => handleApprove(request.id)}
                 >
                   <CheckIcon className="h-4 w-4 mr-2" />
@@ -181,6 +243,7 @@ export function PendingRequestsQueue() {
                 <Button
                   variant="outline"
                   className="flex-1 text-destructive hover:text-destructive bg-transparent"
+                  disabled={isRowDisabled(request.id)}
                   onClick={() => handleDeny(request.id)}
                 >
                   <XIcon className="h-4 w-4 mr-2" />

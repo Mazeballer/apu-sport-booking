@@ -1,69 +1,117 @@
-'use client';
+// components/staff/issue-return-flow.tsx
+"use client";
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { equipment, equipmentRequests, equipmentMaintenance } from '@/lib/data';
-import { useToast } from '@/hooks/use-toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { X, Plus, AlertTriangle, Search } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+} from "@/components/ui/select";
+import { notify } from "@/lib/toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { X, Plus, AlertTriangle, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import type { EquipReturnCondition } from "@prisma/client";
+import {
+  issueEquipmentFromCounter,
+  returnEquipmentFromCounter,
+} from "@/app/(protected)/staff/issue-return-actions";
 
-interface EquipmentItem {
+interface EquipmentOption {
+  id: string;
+  name: string;
+  qtyAvailable: number;
+  qtyTotal: number;
+  facilityId: string;
+  facilityName: string;
+}
+
+interface ApprovedRequestRow {
+  id: string; // equipmentRequest id
+  userEmail: string;
+  facilityName: string;
+  items: {
+    equipmentId: string;
+    equipmentName: string;
+    qtyRequested: number;
+  }[];
+}
+
+interface IssuedItemRow {
+  id: string; // equipmentRequestItem id
+  requestId: string;
+  userEmail: string;
+  equipmentId: string;
+  equipmentName: string;
+  facilityName: string;
+  quantityBorrowed: number;
+  quantityReturned: number;
+}
+
+interface EquipmentItemSelection {
   equipmentId: string;
   equipmentName: string;
   quantity: number;
   maxAvailable: number;
 }
 
-export function IssueReturnFlow() {
-  const { toast } = useToast();
-  const [issueEmail, setIssueEmail] = useState('');
-  const [selectedEquipment, setSelectedEquipment] = useState<EquipmentItem[]>(
-    []
-  );
-  const [currentEquipmentId, setCurrentEquipmentId] = useState('');
+interface IssueReturnFlowProps {
+  equipmentOptions: EquipmentOption[];
+  approvedRequests: ApprovedRequestRow[];
+  issuedItems: IssuedItemRow[];
+}
+
+export function IssueReturnFlow({
+  equipmentOptions,
+  approvedRequests,
+  issuedItems,
+}: IssueReturnFlowProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  const [issueEmail, setIssueEmail] = useState("");
+  const [selectedEquipment, setSelectedEquipment] = useState<
+    EquipmentItemSelection[]
+  >([]);
+  const [currentEquipmentId, setCurrentEquipmentId] = useState("");
   const [currentQuantity, setCurrentQuantity] = useState(1);
   const [selectedApprovedRequestId, setSelectedApprovedRequestId] = useState<
     string | null
   >(null);
 
-  const [selectedIssuedRequest, setSelectedIssuedRequest] = useState<
-    (typeof equipmentRequests)[0] | null
-  >(null);
+  const [selectedIssuedRequest, setSelectedIssuedRequest] =
+    useState<IssuedItemRow | null>(null);
 
-  const [returnCondition, setReturnCondition] = useState<
-    'good' | 'damaged' | 'lost' | 'not_returned'
-  >('good');
-  const [damageNotes, setDamageNotes] = useState('');
+  const [returnCondition, setReturnCondition] =
+    useState<EquipReturnCondition>("good");
+  const [damageNotes, setDamageNotes] = useState("");
   const [quantityReturning, setQuantityReturning] = useState(1);
 
-  const [emailSearchQuery, setEmailSearchQuery] = useState('');
+  const [emailSearchQuery, setEmailSearchQuery] = useState("");
 
-  const approvedRequests = equipmentRequests.filter(
-    (r) => r.status === 'approved'
-  );
+  // ISSUE TAB LOGIC
 
   const handleAddEquipment = () => {
     if (!currentEquipmentId || currentQuantity < 1) return;
 
-    const eq = equipment.find((e) => e.id === currentEquipmentId);
+    const eq = equipmentOptions.find((e) => e.id === currentEquipmentId);
     if (!eq) return;
 
     const existingIndex = selectedEquipment.findIndex(
       (item) => item.equipmentId === currentEquipmentId
     );
+
+    const safeQty = Math.min(currentQuantity, eq.qtyAvailable);
 
     if (existingIndex >= 0) {
       const updated = [...selectedEquipment];
@@ -73,30 +121,30 @@ export function IssueReturnFlow() {
       );
       setSelectedEquipment(updated);
     } else {
-      setSelectedEquipment([
-        ...selectedEquipment,
+      setSelectedEquipment((prev) => [
+        ...prev,
         {
           equipmentId: eq.id,
           equipmentName: eq.name,
-          quantity: Math.min(currentQuantity, eq.qtyAvailable),
+          quantity: safeQty,
           maxAvailable: eq.qtyAvailable,
         },
       ]);
     }
 
-    setCurrentEquipmentId('');
+    setCurrentEquipmentId("");
     setCurrentQuantity(1);
   };
 
   const handleRemoveEquipment = (equipmentId: string) => {
-    setSelectedEquipment(
-      selectedEquipment.filter((item) => item.equipmentId !== equipmentId)
+    setSelectedEquipment((prev) =>
+      prev.filter((item) => item.equipmentId !== equipmentId)
     );
   };
 
   const handleUpdateQuantity = (equipmentId: string, newQuantity: number) => {
-    setSelectedEquipment(
-      selectedEquipment.map((item) =>
+    setSelectedEquipment((prev) =>
+      prev.map((item) =>
         item.equipmentId === equipmentId
           ? {
               ...item,
@@ -110,36 +158,39 @@ export function IssueReturnFlow() {
   const handleIssue = () => {
     if (!issueEmail || selectedEquipment.length === 0) return;
 
-    selectedEquipment.forEach((item) => {
-      const eq = equipment.find((e) => e.id === item.equipmentId);
-      if (eq) {
-        eq.qtyAvailable = Math.max(0, eq.qtyAvailable - item.quantity);
-        equipmentRequests.push({
-          id: `er${Date.now()}_${item.equipmentId}`,
-          userId: 'current_user',
-          userEmail: issueEmail,
-          equipmentId: item.equipmentId,
-          equipmentName: item.equipmentName,
-          facilityId: eq.facilityId,
-          facilityName: 'Current Facility',
-          requestDate: new Date().toISOString().split('T')[0],
-          status: 'issued',
-          createdAt: new Date().toISOString(),
-          quantityBorrowed: item.quantity,
-          quantityReturned: 0,
+    if (!selectedApprovedRequestId) {
+      notify.error("Please select an approved request first.");
+      return;
+    }
+
+    const payloadItems = selectedEquipment.map((item) => ({
+      equipmentId: item.equipmentId,
+      qty: item.quantity,
+    }));
+
+    startTransition(async () => {
+      try {
+        await issueEquipmentFromCounter({
+          equipmentRequestId: selectedApprovedRequestId,
+          items: payloadItems,
         });
+        notify.success(
+          `${selectedEquipment.length} item(s) issued to ${issueEmail}`
+        );
+
+        setIssueEmail("");
+        setSelectedEquipment([]);
+        setSelectedApprovedRequestId(null);
+        router.refresh();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Something went wrong";
+        notify.error("Issue failed");
       }
     });
-
-    toast({
-      title: 'Equipment Issued',
-      description: `${selectedEquipment.length} item(s) issued to ${issueEmail}`,
-    });
-
-    setIssueEmail('');
-    setSelectedEquipment([]);
-    setSelectedApprovedRequestId(null);
   };
+
+  // RETURN TAB LOGIC
 
   const handleReturn = () => {
     if (!selectedIssuedRequest) return;
@@ -149,118 +200,48 @@ export function IssueReturnFlow() {
       selectedIssuedRequest.quantityReturned;
 
     if (quantityReturning < 1 || quantityReturning > quantityOutstanding) {
-      toast({
-        title: 'Invalid Quantity',
-        description: `Please enter a valid quantity between 1 and ${quantityOutstanding}`,
-        variant: 'destructive',
-      });
+      notify.error(
+        `Please enter a valid quantity between 1 and ${quantityOutstanding}`
+      );
       return;
     }
 
-    if (returnCondition === 'damaged' && !damageNotes.trim()) {
-      toast({
-        title: 'Damage Notes Required',
-        description:
-          'Please provide details about the damage before processing return.',
-        variant: 'destructive',
-      });
+    if (returnCondition === "damaged" && !damageNotes.trim()) {
+      notify.error(
+        "Please provide details about the damage before processing return."
+      );
       return;
     }
 
-    const eq = equipment.find(
-      (e) => e.id === selectedIssuedRequest.equipmentId
-    );
+    const requestItemId = selectedIssuedRequest.id;
 
-    if (eq) {
-      selectedIssuedRequest.quantityReturned += quantityReturning;
-      const newOutstanding =
-        selectedIssuedRequest.quantityBorrowed -
-        selectedIssuedRequest.quantityReturned;
+    startTransition(async () => {
+      try {
+        await returnEquipmentFromCounter({
+          requestItemId,
+          quantity: quantityReturning,
+          condition: returnCondition,
+          damageNotes,
+        });
 
-      if (newOutstanding === 0) {
-        selectedIssuedRequest.status = 'returned';
-        selectedIssuedRequest.returnedAt = new Date().toISOString();
+        notify.success(`Processed return of ${quantityReturning} item(s)`);
+
+        setSelectedIssuedRequest(null);
+        setReturnCondition("good");
+        setDamageNotes("");
+        setQuantityReturning(1);
+        router.refresh();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Something went wrong";
+        notify.error("Return failed");
       }
-
-      selectedIssuedRequest.returnCondition = returnCondition;
-      selectedIssuedRequest.damageNotes = damageNotes;
-
-      switch (returnCondition) {
-        case 'good':
-          eq.qtyAvailable = Math.min(
-            eq.qtyTotal,
-            eq.qtyAvailable + quantityReturning
-          );
-          toast({
-            title: 'Equipment Returned',
-            description: `${quantityReturning} ${
-              eq.name
-            }(s) returned in good condition. ${
-              newOutstanding > 0
-                ? `${newOutstanding} still outstanding.`
-                : 'All items returned.'
-            }`,
-          });
-          break;
-
-        case 'damaged':
-          for (let i = 0; i < quantityReturning; i++) {
-            equipmentMaintenance.push({
-              id: `maint${Date.now()}_${i}`,
-              equipmentId: eq.id,
-              equipmentName: eq.name,
-              facilityId: eq.facilityId,
-              requestId: selectedIssuedRequest.id,
-              userEmail: selectedIssuedRequest.userEmail,
-              damageDescription: damageNotes,
-              reportedAt: new Date().toISOString(),
-              status: 'pending_repair',
-            });
-          }
-          toast({
-            title: 'Damaged Equipment Reported',
-            description: `${quantityReturning} ${
-              eq.name
-            }(s) marked for repair. ${
-              newOutstanding > 0 ? `${newOutstanding} still outstanding.` : ''
-            }`,
-            variant: 'destructive',
-          });
-          break;
-
-        case 'lost':
-          eq.qtyTotal = Math.max(0, eq.qtyTotal - quantityReturning);
-          toast({
-            title: 'Equipment Marked as Lost',
-            description: `${quantityReturning} ${eq.name}(s) marked as lost. ${
-              newOutstanding > 0 ? `${newOutstanding} still outstanding.` : ''
-            }`,
-            variant: 'destructive',
-          });
-          break;
-
-        case 'not_returned':
-          selectedIssuedRequest.status = 'issued';
-          toast({
-            title: 'Equipment Marked Overdue',
-            description: `${quantityReturning} ${eq.name}(s) overdue. Follow-up required with ${selectedIssuedRequest.userEmail}`,
-            variant: 'destructive',
-          });
-          break;
-      }
-
-      setSelectedIssuedRequest(null);
-      setReturnCondition('good');
-      setDamageNotes('');
-      setQuantityReturning(1);
-    }
+    });
   };
 
-  const filteredIssuedRequests = equipmentRequests
-    .filter((r) => r.status === 'issued')
-    .filter((r) =>
-      r.userEmail.toLowerCase().includes(emailSearchQuery.toLowerCase())
-    );
+  const filteredIssuedRequests = issuedItems.filter((r) =>
+    r.userEmail.toLowerCase().includes(emailSearchQuery.toLowerCase())
+  );
 
   return (
     <Tabs defaultValue="issue" className="w-full">
@@ -279,6 +260,7 @@ export function IssueReturnFlow() {
         </TabsTrigger>
       </TabsList>
 
+      {/* ISSUE TAB */}
       <TabsContent value="issue" className="space-y-6 pt-6">
         <div className="space-y-4">
           <div className="space-y-2">
@@ -304,7 +286,7 @@ export function IssueReturnFlow() {
                   <SelectValue placeholder="Select equipment" />
                 </SelectTrigger>
                 <SelectContent>
-                  {equipment.map((eq) => (
+                  {equipmentOptions.map((eq) => (
                     <SelectItem
                       key={eq.id}
                       value={eq.id}
@@ -319,7 +301,7 @@ export function IssueReturnFlow() {
                 type="number"
                 min="1"
                 max={
-                  equipment.find((e) => e.id === currentEquipmentId)
+                  equipmentOptions.find((e) => e.id === currentEquipmentId)
                     ?.qtyAvailable || 1
                 }
                 value={currentQuantity}
@@ -333,7 +315,7 @@ export function IssueReturnFlow() {
                 type="button"
                 size="icon"
                 onClick={handleAddEquipment}
-                disabled={!currentEquipmentId}
+                disabled={!currentEquipmentId || isPending}
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -391,45 +373,75 @@ export function IssueReturnFlow() {
               <div className="space-y-2">
                 {approvedRequests.map((request) => {
                   const isSelected = selectedApprovedRequestId === request.id;
+
                   return (
                     <div
                       key={request.id}
                       className="flex items-center justify-between text-sm p-2 rounded bg-card"
                     >
-                      <div>
+                      <div className="flex-1">
                         <p className="font-medium">{request.userEmail}</p>
                         <p className="text-muted-foreground text-xs">
-                          {request.equipmentName}
+                          {request.facilityName}
                         </p>
+
+                        <div className="mt-2 space-y-1">
+                          {request.items.map((item) => (
+                            <div
+                              key={item.equipmentId}
+                              className="flex items-center text-xs text-muted-foreground"
+                            >
+                              <span>{item.equipmentName}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+
                       <Button
                         size="sm"
-                        variant={isSelected ? 'default' : 'outline'}
+                        variant={isSelected ? "default" : "outline"}
                         onClick={() => {
                           if (isSelected) {
+                            // deselect
                             setSelectedApprovedRequestId(null);
-                            setIssueEmail('');
+                            setIssueEmail("");
                             setSelectedEquipment([]);
-                          } else {
-                            setSelectedApprovedRequestId(request.id);
-                            setIssueEmail(request.userEmail);
-                            const eq = equipment.find(
-                              (e) => e.id === request.equipmentId
-                            );
-                            if (eq) {
-                              setSelectedEquipment([
-                                {
-                                  equipmentId: eq.id,
-                                  equipmentName: eq.name,
-                                  quantity: 1,
-                                  maxAvailable: eq.qtyAvailable,
-                                },
-                              ]);
-                            }
+                            return;
                           }
+
+                          // select this request and prefill all its items
+                          const selections: EquipmentItemSelection[] = [];
+
+                          for (const item of request.items) {
+                            const eq = equipmentOptions.find(
+                              (e) => e.id === item.equipmentId
+                            );
+                            if (!eq || eq.qtyAvailable <= 0) continue;
+
+                            selections.push({
+                              equipmentId: eq.id,
+                              equipmentName: eq.name,
+                              quantity: Math.min(
+                                item.qtyRequested,
+                                eq.qtyAvailable
+                              ),
+                              maxAvailable: eq.qtyAvailable,
+                            });
+                          }
+
+                          if (selections.length === 0) {
+                            notify.error(
+                              "All items in this request are currently out of stock."
+                            );
+                            return;
+                          }
+
+                          setSelectedApprovedRequestId(request.id);
+                          setIssueEmail(request.userEmail);
+                          setSelectedEquipment(selections);
                         }}
                       >
-                        {isSelected ? 'Selected' : 'Select'}
+                        {isSelected ? "Selected" : "Select"}
                       </Button>
                     </div>
                   );
@@ -441,14 +453,17 @@ export function IssueReturnFlow() {
           <Button
             onClick={handleIssue}
             className="w-full"
-            disabled={!issueEmail || selectedEquipment.length === 0}
+            disabled={
+              !issueEmail || selectedEquipment.length === 0 || isPending
+            }
           >
             Issue Equipment ({selectedEquipment.length} item
-            {selectedEquipment.length !== 1 ? 's' : ''})
+            {selectedEquipment.length !== 1 ? "s" : ""})
           </Button>
         </div>
       </TabsContent>
 
+      {/* RETURN TAB */}
       <TabsContent value="return" className="space-y-6 pt-6">
         <div className="space-y-4">
           {selectedIssuedRequest ? (
@@ -460,8 +475,8 @@ export function IssueReturnFlow() {
                   variant="ghost"
                   onClick={() => {
                     setSelectedIssuedRequest(null);
-                    setReturnCondition('good');
-                    setDamageNotes('');
+                    setReturnCondition("good");
+                    setDamageNotes("");
                     setQuantityReturning(1);
                   }}
                 >
@@ -528,7 +543,7 @@ export function IssueReturnFlow() {
 
               <div className="space-y-2">
                 <Label htmlFor="quantity-returning">
-                  Quantity Being Returned{' '}
+                  Quantity Being Returned{" "}
                   <span className="text-destructive">*</span>
                 </Label>
                 <Input
@@ -547,7 +562,7 @@ export function IssueReturnFlow() {
                   className="border-3 border-primary/20 focus:border-primary shadow-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Maximum:{' '}
+                  Maximum:{" "}
                   {selectedIssuedRequest.quantityBorrowed -
                     selectedIssuedRequest.quantityReturned}
                 </p>
@@ -559,7 +574,9 @@ export function IssueReturnFlow() {
                 </Label>
                 <RadioGroup
                   value={returnCondition}
-                  onValueChange={(value: any) => setReturnCondition(value)}
+                  onValueChange={(value) =>
+                    setReturnCondition(value as EquipReturnCondition)
+                  }
                 >
                   <div className="flex items-center space-x-2 p-3 rounded-lg border bg-card">
                     <RadioGroupItem value="good" id="good" />
@@ -615,10 +632,10 @@ export function IssueReturnFlow() {
                 </RadioGroup>
               </div>
 
-              {returnCondition === 'damaged' && (
+              {returnCondition === "damaged" && (
                 <div className="space-y-2">
                   <Label htmlFor="damage-notes">
-                    Damage Description{' '}
+                    Damage Description{" "}
                     <span className="text-destructive">*</span>
                   </Label>
                   <Textarea
@@ -635,10 +652,10 @@ export function IssueReturnFlow() {
               <Button
                 onClick={handleReturn}
                 className="w-full"
-                disabled={!selectedIssuedRequest}
+                disabled={!selectedIssuedRequest || isPending}
               >
                 Process Return ({quantityReturning} item
-                {quantityReturning !== 1 ? 's' : ''})
+                {quantityReturning !== 1 ? "s" : ""})
               </Button>
             </div>
           ) : (
@@ -649,8 +666,7 @@ export function IssueReturnFlow() {
 
           <Separator />
 
-          {equipmentRequests.filter((r) => r.status === 'issued').length >
-            0 && (
+          {issuedItems.length > 0 && (
             <div className="bg-muted/50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-semibold text-sm">Currently Issued</h4>
@@ -683,7 +699,7 @@ export function IssueReturnFlow() {
                         <div className="flex-1">
                           <p className="font-medium">{request.userEmail}</p>
                           <p className="text-muted-foreground text-xs">
-                            {request.equipmentName}
+                            {request.equipmentName} · {request.facilityName}
                           </p>
                           <div className="flex gap-2 mt-1">
                             <Badge variant="secondary" className="text-xs">
@@ -707,22 +723,22 @@ export function IssueReturnFlow() {
                         </div>
                         <Button
                           size="sm"
-                          variant={isSelected ? 'default' : 'outline'}
+                          variant={isSelected ? "default" : "outline"}
                           onClick={() => {
                             if (isSelected) {
                               setSelectedIssuedRequest(null);
-                              setReturnCondition('good');
-                              setDamageNotes('');
+                              setReturnCondition("good");
+                              setDamageNotes("");
                               setQuantityReturning(1);
                             } else {
                               setSelectedIssuedRequest(request);
-                              setReturnCondition('good');
-                              setDamageNotes('');
-                              setQuantityReturning(Math.min(1, outstanding));
+                              setReturnCondition("good");
+                              setDamageNotes("");
+                              setQuantityReturning(1);
                             }
                           }}
                         >
-                          {isSelected ? 'Selected' : 'Select'}
+                          {isSelected ? "Selected" : "Select"}
                         </Button>
                       </div>
                     );
@@ -737,14 +753,14 @@ export function IssueReturnFlow() {
                       <Button
                         variant="link"
                         size="sm"
-                        onClick={() => setEmailSearchQuery('')}
+                        onClick={() => setEmailSearchQuery("")}
                         className="mt-2"
                       >
                         Clear search
                       </Button>
                     </>
                   ) : (
-                    'No currently issued equipment'
+                    "No currently issued equipment"
                   )}
                 </div>
               )}
