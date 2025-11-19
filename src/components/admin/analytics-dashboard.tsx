@@ -1,13 +1,12 @@
-'use client';
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { facilities, bookings, equipment } from '@/lib/data';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   TrendingUpIcon,
   BuildingIcon,
   PackageIcon,
   ActivityIcon,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -22,19 +21,46 @@ import {
   Legend,
   ResponsiveContainer,
   Tooltip,
-} from 'recharts';
+} from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-} from '@/components/ui/chart';
+} from "@/components/ui/chart";
 
-export function AnalyticsDashboard() {
+type FacilityAnalytics = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
+type BookingAnalytics = {
+  id: string;
+  status: string;
+  start: string;
+  facilityId: string;
+};
+
+type EquipmentAnalytics = {
+  id: string;
+  name: string;
+  facilityId: string;
+  qtyTotal: number;
+  qtyAvailable: number;
+};
+
+export function AnalyticsDashboard({
+  facilities,
+  bookings,
+  equipment,
+}: {
+  facilities: FacilityAnalytics[];
+  bookings: BookingAnalytics[];
+  equipment: EquipmentAnalytics[];
+}) {
   // Calculate metrics
-  const totalBookings = bookings.filter((b) => b.status === 'confirmed').length;
-  const activeFacilities = facilities.filter(
-    (f) => f.status === 'active'
-  ).length;
+  const totalBookings = bookings.filter((b) => b.status === "confirmed").length;
+  const activeFacilities = facilities.filter((f) => f.active).length;
   const totalFacilities = facilities.length;
   const totalEquipmentItems = equipment.reduce(
     (sum, eq) => sum + eq.qtyTotal,
@@ -52,26 +78,54 @@ export function AnalyticsDashboard() {
         )
       : 0;
 
+  // Booking trend, compare last 7 days with the 7 days before that
+  const now = new Date();
+  const startThisPeriod = new Date(now);
+  startThisPeriod.setDate(now.getDate() - 7);
+  const startPrevPeriod = new Date(now);
+  startPrevPeriod.setDate(now.getDate() - 14);
+
+  const bookingsThisPeriod = bookings.filter((b) => {
+    if (b.status !== "confirmed") return false;
+    const start = new Date(b.start);
+    return start >= startThisPeriod;
+  }).length;
+
+  const bookingsLastPeriod = bookings.filter((b) => {
+    if (b.status !== "confirmed") return false;
+    const start = new Date(b.start);
+    return start >= startPrevPeriod && start < startThisPeriod;
+  }).length;
+
+  const bookingDelta = bookingsThisPeriod - bookingsLastPeriod;
+
+  const bookingChangePct =
+    bookingsLastPeriod === 0
+      ? null
+      : Math.round((bookingDelta / bookingsLastPeriod) * 100);
+
+  const bookingIsUp = bookingDelta >= 0;
+
   // Facility usage distribution (pie chart data)
   const facilityUsageData = facilities.map((facility) => {
     const facilityBookings = bookings.filter(
-      (b) => b.facilityId === facility.id && b.status === 'confirmed'
+      (b) => b.facilityId === facility.id && b.status === "confirmed"
     ).length;
     return {
-      name: facility.name.split(' ')[0], // Short name
+      name: facility.name.split(" ")[0], // Short name
       value: facilityBookings,
       fullName: facility.name,
     };
   });
 
   const weeklyTrendData = [
-    { day: 'Mon', bookings: 12 },
-    { day: 'Tue', bookings: 19 },
-    { day: 'Wed', bookings: 15 },
-    { day: 'Thu', bookings: 22 },
-    { day: 'Fri', bookings: 28 },
-    { day: 'Sat', bookings: 35 },
-    { day: 'Sun', bookings: 30 },
+    { day: "Mon", bookings: 12 },
+    { day: "Tue", bookings: 19 },
+    { day: "Wed", bookings: 15 },
+    { day: "Thu", bookings: 22 },
+    { day: "Fri", bookings: 28 },
+    { day: "Sat", bookings: 35 },
+    { day: "Sun", bookings: 30 },
   ];
 
   // Equipment usage overview (bar chart data)
@@ -83,17 +137,17 @@ export function AnalyticsDashboard() {
   }));
 
   const FACILITY_COLORS = [
-    '#3b82f6',
-    '#10b981',
-    '#f59e0b',
-    '#8b5cf6',
-    '#ef4444',
-    '#06b6d4',
+    "#3b82f6",
+    "#10b981",
+    "#f59e0b",
+    "#8b5cf6",
+    "#ef4444",
+    "#06b6d4",
   ];
 
   const EQUIPMENT_COLORS = {
-    inUse: '#2563eb', // Darker blue for better visibility
-    available: '#6b7280', // Changed from #d1d5db to #6b7280 for much better visibility in light mode
+    inUse: "#2563eb", // Darker blue for better visibility
+    available: "#6b7280", // Changed from #d1d5db to #6b7280 for much better visibility in light mode
   };
 
   return (
@@ -110,9 +164,19 @@ export function AnalyticsDashboard() {
             <div className="font-bold text-primary text-4xl">
               {totalBookings}
             </div>
-            <p className="text-xs text-green-600 mt-1 flex items-center gap-1 font-semibold">
-              <TrendingUpIcon className="h-3 w-3" />
-              +12% from last week
+            <p
+              className={`text-xs mt-1 flex items-center gap-1 font-semibold ${
+                bookingIsUp ? "text-green-600" : "text-red-500"
+              }`}
+            >
+              <TrendingUpIcon
+                className={`h-3 w-3 ${bookingIsUp ? "" : "rotate-180"}`}
+              />
+              {bookingChangePct === null
+                ? "No previous week data"
+                : `${
+                    bookingIsUp ? "+" : ""
+                  }${bookingChangePct}% from last week`}
             </p>
           </CardContent>
         </Card>
@@ -183,8 +247,8 @@ export function AnalyticsDashboard() {
             <ChartContainer
               config={{
                 bookings: {
-                  label: 'Bookings',
-                  color: '#3b82f6',
+                  label: "Bookings",
+                  color: "#3b82f6",
                 },
               }}
               className="h-[280px] w-full"
@@ -203,7 +267,7 @@ export function AnalyticsDashboard() {
                     dataKey="bookings"
                     stroke="#3b82f6"
                     strokeWidth={3}
-                    dot={{ r: 5, fill: '#3b82f6' }}
+                    dot={{ r: 5, fill: "#3b82f6" }}
                     activeDot={{ r: 7 }}
                   />
                 </LineChart>
@@ -228,12 +292,13 @@ export function AnalyticsDashboard() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry) =>
-                      `${entry.name} ${(
-                        (entry.value / totalBookings) *
-                        100
-                      ).toFixed(1)}%`
-                    }
+                    label={(entry) => {
+                      if (totalBookings === 0) {
+                        return `${entry.name} 0%`;
+                      }
+                      const pct = (entry.value / totalBookings) * 100;
+                      return `${entry.name} ${pct.toFixed(1)}%`;
+                    }}
                     outerRadius={90}
                     dataKey="value"
                   >
@@ -263,11 +328,11 @@ export function AnalyticsDashboard() {
           <ChartContainer
             config={{
               inUse: {
-                label: 'In Use',
+                label: "In Use",
                 color: EQUIPMENT_COLORS.inUse,
               },
               available: {
-                label: 'Available',
+                label: "Available",
                 color: EQUIPMENT_COLORS.available,
               },
             }}
@@ -281,11 +346,11 @@ export function AnalyticsDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 13, fill: '#374151' }}
+                  tick={{ fontSize: 13, fill: "#374151" }}
                 />
-                <YAxis tick={{ fontSize: 13, fill: '#374151' }} />
+                <YAxis tick={{ fontSize: 13, fill: "#374151" }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Legend wrapperStyle={{ fontSize: '14px', fontWeight: 600 }} />
+                <Legend wrapperStyle={{ fontSize: "14px", fontWeight: 600 }} />
                 <Bar
                   dataKey="inUse"
                   stackId="a"

@@ -136,6 +136,13 @@ export default async function AdminPage({
     orderBy: { createdAt: "desc" },
   });
 
+  // Small, serializable shape for analytics only
+  const facilitiesForAnalytics = facilitiesFromDb.map((f) => ({
+    id: f.id,
+    name: f.name,
+    active: f.active,
+  }));
+
   // FacilitiesManagement expects UiFacility[]
   const initialFacilities: UiFacility[] = facilitiesFromDb.map((f) => {
     const sportType = f.type as SportType;
@@ -206,6 +213,57 @@ export default async function AdminPage({
     }))
   );
 
+  // 4) Analytics data
+  const bookingsForAnalytics = await prisma.booking.findMany({
+    select: {
+      id: true,
+      status: true,
+      start: true,
+      facilityId: true,
+    },
+  });
+
+  const bookingsForAnalyticsSerializable = bookingsForAnalytics.map((b) => ({
+    ...b,
+    start: b.start.toISOString(),
+  }));
+  const statusItems = await prisma.equipmentRequestItem.findMany({
+    where: {
+      dismissed: false,
+    },
+    include: {
+      equipment: true,
+      request: {
+        include: {
+          booking: {
+            include: {
+              facility: true,
+              user: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      issuedAt: "desc",
+    },
+  });
+
+  const equipmentStatusRows = statusItems.map((item) => ({
+    id: item.id,
+    userEmail: item.request.booking.user.email,
+    equipmentName: item.equipment.name,
+    facilityName: item.request.booking.facility.name,
+    quantityBorrowed: item.qty,
+    quantityReturned: item.qtyReturned,
+    issuedAt: item.issuedAt ? item.issuedAt.toISOString() : null,
+    returnedAt: item.request.returnedAt
+      ? item.request.returnedAt.toISOString()
+      : null,
+    condition: item.condition,
+    damageNotes: item.damageNotes,
+  }));
+
   // 4) Render
   return (
     <>
@@ -271,7 +329,11 @@ export default async function AdminPage({
             </TabsList>
 
             <TabsContent value="analytics" className="hidden lg:block">
-              <AnalyticsDashboard />
+              <AnalyticsDashboard
+                facilities={facilitiesForAnalytics}
+                bookings={bookingsForAnalyticsSerializable}
+                equipment={equipmentForInventory}
+              />
             </TabsContent>
 
             <TabsContent value="facilities">
@@ -328,7 +390,7 @@ export default async function AdminPage({
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <EquipmentStatus />
+                  <EquipmentStatus rows={equipmentStatusRows} />
                 </CardContent>
               </Card>
             </TabsContent>

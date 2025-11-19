@@ -1,8 +1,9 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { equipmentRequests } from '@/lib/data';
-import { Badge } from '@/components/ui/badge';
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -10,24 +11,48 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import {
   AlertTriangle,
   PackageX,
   Clock,
   CheckCircle,
   Search,
-} from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { Card, CardContent } from '@/components/ui/card';
+  X,
+} from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import type { EquipReturnCondition } from "@prisma/client";
+import { dismissEquipmentStatusItem } from "@/app/(protected)/admin/status/actions";
+import { notify } from "@/lib/toast";
 
-export function EquipmentStatus() {
-  const [searchQuery, setSearchQuery] = useState('');
+export interface EquipmentStatusRow {
+  id: string;
+  userEmail: string;
+  equipmentName: string;
+  facilityName: string;
+  quantityBorrowed: number;
+  quantityReturned: number;
+  issuedAt: string | null;
+  returnedAt: string | null;
+  condition: EquipReturnCondition | null;
+  damageNotes: string | null;
+}
+
+interface EquipmentStatusProps {
+  rows?: EquipmentStatusRow[];
+}
+
+export function EquipmentStatus({ rows = [] }: EquipmentStatusProps) {
+  const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useIsMobile();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
-  const filterRequests = (requests: typeof equipmentRequests) => {
+  const filterRequests = (requests: EquipmentStatusRow[]) => {
     if (!searchQuery.trim()) return requests;
     return requests.filter((req) =>
       req.userEmail.toLowerCase().includes(searchQuery.toLowerCase())
@@ -35,30 +60,33 @@ export function EquipmentStatus() {
   };
 
   const today = new Date();
-  const overdueEquipment = equipmentRequests.filter((req) => {
-    if (req.status !== 'issued') return false;
-    const requestDate = new Date(req.requestDate);
-    const daysSinceRequest = Math.floor(
-      (today.getTime() - requestDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return daysSinceRequest > 7; // Consider overdue if issued for more than 7 days
+
+  const daysBetween = (iso: string | null) => {
+    if (!iso) return 0;
+    const d = new Date(iso);
+    return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  // Overdue: issued more than 7 days ago, not fully returned, no final condition set
+  const overdueEquipment = rows.filter((req) => {
+    if (!req.issuedAt) return false;
+    if (req.condition !== null) return false;
+    if (req.quantityReturned >= req.quantityBorrowed) return false;
+
+    const daysSinceIssue = daysBetween(req.issuedAt);
+    return daysSinceIssue > 7;
   });
 
-  const damagedEquipment = equipmentRequests.filter(
-    (req) => req.status === 'returned' && req.returnCondition === 'damaged'
-  );
+  const damagedEquipment = rows.filter((req) => req.condition === "damaged");
 
-  const lostEquipment = equipmentRequests.filter(
-    (req) => req.status === 'returned' && req.returnCondition === 'lost'
-  );
+  const lostEquipment = rows.filter((req) => req.condition === "lost");
 
-  const returnHistory = equipmentRequests.filter(
-    (req) => req.status === 'returned'
-  );
+  // History: any item with a final condition, dismissed items are already filtered at query level
+  const returnHistory = rows.filter((req) => req.condition !== null);
 
-  const getConditionBadge = (condition?: string) => {
+  const getConditionBadge = (condition?: EquipReturnCondition | null) => {
     switch (condition) {
-      case 'good':
+      case "good":
         return (
           <Badge
             variant="secondary"
@@ -68,7 +96,7 @@ export function EquipmentStatus() {
             Good
           </Badge>
         );
-      case 'damaged':
+      case "damaged":
         return (
           <Badge
             variant="secondary"
@@ -78,7 +106,7 @@ export function EquipmentStatus() {
             Damaged
           </Badge>
         );
-      case 'lost':
+      case "lost":
         return (
           <Badge
             variant="secondary"
@@ -88,17 +116,36 @@ export function EquipmentStatus() {
             Lost
           </Badge>
         );
+      case "not_returned":
+        return (
+          <Badge
+            variant="secondary"
+            className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700"
+          >
+            <Clock className="h-3 w-3 mr-1" />
+            Not returned
+          </Badge>
+        );
       default:
         return <Badge variant="secondary">-</Badge>;
     }
   };
 
-  const calculateDaysOverdue = (requestDate: string) => {
-    const reqDate = new Date(requestDate);
-    const daysSince = Math.floor(
-      (today.getTime() - reqDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return Math.max(0, daysSince - 7); // Assuming 7 days is the standard loan period
+  const calculateDaysOverdue = (issuedAt: string | null) => {
+    const daysSince = daysBetween(issuedAt);
+    return Math.max(0, daysSince - 7);
+  };
+
+  const handleDismiss = (id: string) => {
+    startTransition(async () => {
+      try {
+        await dismissEquipmentStatusItem(id);
+        notify.success("Item dismissed from status view.");
+        router.refresh();
+      } catch {
+        notify.error("Could not dismiss item.");
+      }
+    });
   };
 
   return (
@@ -153,6 +200,7 @@ export function EquipmentStatus() {
           </TabsTrigger>
         </TabsList>
 
+        {/* Overdue */}
         <TabsContent value="overdue" className="space-y-4 mt-4">
           {filterRequests(overdueEquipment).length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -162,17 +210,28 @@ export function EquipmentStatus() {
           ) : isMobile ? (
             <div className="space-y-3">
               {filterRequests(overdueEquipment).map((req) => {
-                const daysOverdue = calculateDaysOverdue(req.requestDate);
+                const daysOverdue = calculateDaysOverdue(req.issuedAt);
                 return (
                   <Card key={req.id} className="shadow-sm">
                     <CardContent className="p-4 space-y-3">
-                      <div>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Student
-                        </p>
-                        <p className="font-semibold text-sm break-all mt-1">
-                          {req.userEmail}
-                        </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            Student
+                          </p>
+                          <p className="font-semibold text-sm break-all mt-1">
+                            {req.userEmail}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleDismiss(req.id)}
+                          disabled={isPending}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -215,7 +274,9 @@ export function EquipmentStatus() {
                             Issued Date
                           </p>
                           <p className="font-semibold text-sm mt-1">
-                            {new Date(req.requestDate).toLocaleDateString()}
+                            {req.issuedAt
+                              ? new Date(req.issuedAt).toLocaleDateString()
+                              : "-"}
                           </p>
                         </div>
                         <div>
@@ -261,11 +322,14 @@ export function EquipmentStatus() {
                     <TableHead className="font-semibold text-foreground">
                       Days Overdue
                     </TableHead>
+                    <TableHead className="font-semibold text-foreground">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filterRequests(overdueEquipment).map((req) => {
-                    const daysOverdue = calculateDaysOverdue(req.requestDate);
+                    const daysOverdue = calculateDaysOverdue(req.issuedAt);
                     return (
                       <TableRow key={req.id} className="hover:bg-muted/50">
                         <TableCell className="font-medium">
@@ -286,8 +350,10 @@ export function EquipmentStatus() {
                             {req.quantityBorrowed - req.quantityReturned}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">
-                          {new Date(req.requestDate).toLocaleDateString()}
+                        <TableCell className="font-medium whitespace-nowrap">
+                          {req.issuedAt
+                            ? new Date(req.issuedAt).toLocaleDateString()
+                            : "-"}
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -296,6 +362,17 @@ export function EquipmentStatus() {
                           >
                             {daysOverdue} days
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDismiss(req.id)}
+                            disabled={isPending}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -306,6 +383,7 @@ export function EquipmentStatus() {
           )}
         </TabsContent>
 
+        {/* Damaged */}
         <TabsContent value="damaged" className="space-y-4 mt-4">
           {filterRequests(damagedEquipment).length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -317,13 +395,24 @@ export function EquipmentStatus() {
               {filterRequests(damagedEquipment).map((req) => (
                 <Card key={req.id} className="shadow-sm">
                   <CardContent className="p-4 space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Student
-                      </p>
-                      <p className="font-semibold text-sm break-all mt-1">
-                        {req.userEmail}
-                      </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Student
+                        </p>
+                        <p className="font-semibold text-sm break-all mt-1">
+                          {req.userEmail}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleDismiss(req.id)}
+                        disabled={isPending}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -360,7 +449,7 @@ export function EquipmentStatus() {
                         <p className="font-semibold text-sm mt-1">
                           {req.returnedAt
                             ? new Date(req.returnedAt).toLocaleDateString()
-                            : '-'}
+                            : "-"}
                         </p>
                       </div>
                     </div>
@@ -368,8 +457,8 @@ export function EquipmentStatus() {
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Damage Notes
                       </p>
-                      <p className="text-sm mt-1 leading-relaxed">
-                        {req.damageNotes || 'No notes provided'}
+                      <p className="text-sm mt-1 leading-relaxed whitespace-normal break-words">
+                        {req.damageNotes || "No notes provided"}
                       </p>
                     </div>
                   </CardContent>
@@ -400,6 +489,9 @@ export function EquipmentStatus() {
                       <TableHead className="font-semibold text-foreground w-[130px]">
                         Returned Date
                       </TableHead>
+                      <TableHead className="font-semibold text-foreground w-[90px]">
+                        Actions
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -422,13 +514,24 @@ export function EquipmentStatus() {
                             {req.quantityReturned}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium max-w-[400px]">
-                          {req.damageNotes || 'No notes provided'}
+                        <TableCell className="font-medium max-w-[400px] whitespace-normal break-words">
+                          {req.damageNotes || "No notes provided"}
                         </TableCell>
                         <TableCell className="font-medium whitespace-nowrap">
                           {req.returnedAt
                             ? new Date(req.returnedAt).toLocaleDateString()
-                            : '-'}
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDismiss(req.id)}
+                            disabled={isPending}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -439,6 +542,7 @@ export function EquipmentStatus() {
           )}
         </TabsContent>
 
+        {/* Lost */}
         <TabsContent value="lost" className="space-y-4 mt-4">
           {filterRequests(lostEquipment).length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -450,13 +554,24 @@ export function EquipmentStatus() {
               {filterRequests(lostEquipment).map((req) => (
                 <Card key={req.id} className="shadow-sm">
                   <CardContent className="p-4 space-y-3">
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Student
-                      </p>
-                      <p className="font-semibold text-sm break-all mt-1">
-                        {req.userEmail}
-                      </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Student
+                        </p>
+                        <p className="font-semibold text-sm break-all mt-1">
+                          {req.userEmail}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleDismiss(req.id)}
+                        disabled={isPending}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -493,7 +608,7 @@ export function EquipmentStatus() {
                         <p className="font-semibold text-sm mt-1">
                           {req.returnedAt
                             ? new Date(req.returnedAt).toLocaleDateString()
-                            : '-'}
+                            : "-"}
                         </p>
                       </div>
                     </div>
@@ -501,8 +616,8 @@ export function EquipmentStatus() {
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Notes
                       </p>
-                      <p className="text-sm mt-1 leading-relaxed">
-                        {req.damageNotes || 'No notes provided'}
+                      <p className="text-sm mt-1 leading-relaxed whitespace-normal break-words">
+                        {req.damageNotes || "No notes provided"}
                       </p>
                     </div>
                   </CardContent>
@@ -533,6 +648,9 @@ export function EquipmentStatus() {
                       <TableHead className="font-semibold text-foreground w-[130px]">
                         Reported Date
                       </TableHead>
+                      <TableHead className="font-semibold text-foreground w-[90px]">
+                        Actions
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -555,13 +673,24 @@ export function EquipmentStatus() {
                             {req.quantityReturned}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium max-w-[400px]">
-                          {req.damageNotes || 'No notes provided'}
+                        <TableCell className="font-medium max-w-[400px] whitespace-normal break-words">
+                          {req.damageNotes || "No notes provided"}
                         </TableCell>
                         <TableCell className="font-medium whitespace-nowrap">
                           {req.returnedAt
                             ? new Date(req.returnedAt).toLocaleDateString()
-                            : '-'}
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDismiss(req.id)}
+                            disabled={isPending}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -572,6 +701,7 @@ export function EquipmentStatus() {
           )}
         </TabsContent>
 
+        {/* History */}
         <TabsContent value="history" className="space-y-4 mt-4">
           {filterRequests(returnHistory).length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -621,7 +751,7 @@ export function EquipmentStatus() {
                           Condition
                         </p>
                         <div className="mt-1">
-                          {getConditionBadge(req.returnCondition)}
+                          {getConditionBadge(req.condition)}
                         </div>
                       </div>
                       <div className="col-span-2">
@@ -631,7 +761,7 @@ export function EquipmentStatus() {
                         <p className="font-semibold text-sm mt-1">
                           {req.returnedAt
                             ? new Date(req.returnedAt).toLocaleDateString()
-                            : '-'}
+                            : "-"}
                         </p>
                       </div>
                     </div>
@@ -640,7 +770,7 @@ export function EquipmentStatus() {
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                           Notes
                         </p>
-                        <p className="text-sm mt-1 leading-relaxed">
+                        <p className="text-sm mt-1 leading-relaxed whitespace-normal break-words">
                           {req.damageNotes}
                         </p>
                       </div>
@@ -692,15 +822,15 @@ export function EquipmentStatus() {
                           {req.quantityReturned}
                         </TableCell>
                         <TableCell>
-                          {getConditionBadge(req.returnCondition)}
+                          {getConditionBadge(req.condition)}
                         </TableCell>
                         <TableCell className="font-medium whitespace-nowrap">
                           {req.returnedAt
                             ? new Date(req.returnedAt).toLocaleDateString()
-                            : '-'}
+                            : "-"}
                         </TableCell>
-                        <TableCell className="font-medium max-w-[400px]">
-                          {req.damageNotes || '-'}
+                        <TableCell className="font-medium max-w-[400px] whitespace-normal break-words">
+                          {req.damageNotes || "-"}
                         </TableCell>
                       </TableRow>
                     ))}

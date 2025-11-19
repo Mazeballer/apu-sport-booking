@@ -95,6 +95,7 @@ export async function issueEquipmentFromCounter(input: {
 
   // Revalidate the staff page, adjust this path to your actual route
   revalidatePath("/staff");
+  revalidatePath("/admin");
 }
 
 // Staff processes a return for one issued item row
@@ -179,4 +180,5 @@ export async function returnEquipmentFromCounter(input: {
   });
 
   revalidatePath("/staff");
+  revalidatePath("/admin");
 }

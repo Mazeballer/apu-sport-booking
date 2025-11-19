@@ -29,6 +29,7 @@ export default async function StaffPage() {
     pendingRequestRows,
     approvedRequestRows,
     issuedItemsRaw,
+    bookingRows,
   ] = await Promise.all([
     prisma.facility.findMany({
       select: { id: true, name: true },
@@ -104,6 +105,26 @@ export default async function StaffPage() {
       orderBy: { issuedAt: "desc" },
       take: 100,
     }),
+    // new: real bookings for the calendar
+    prisma.booking.findMany({
+      where: {
+        status: { in: ["confirmed", "rescheduled"] },
+      },
+      include: {
+        facility: true,
+        user: true,
+        equipmentRequests: {
+          where: { status: { not: "denied" } },
+          include: {
+            items: {
+              include: { equipment: true },
+            },
+          },
+        },
+      },
+      orderBy: { start: "asc" },
+      take: 200,
+    }),
   ]);
 
   const pendingRequests: PendingRequest[] = pendingRequestRows.map((req) => ({
@@ -173,6 +194,35 @@ export default async function StaffPage() {
       quantityBorrowed: item.qty,
       quantityReturned: item.qtyReturned,
     }));
+
+  // real booking data for BookingsCalendar
+  const bookingsForCalendar = bookingRows.map((b) => {
+    const equipmentMap = new Map<string, { name: string; qty: number }>();
+
+    b.equipmentRequests.forEach((req) => {
+      req.items.forEach((item) => {
+        const existing = equipmentMap.get(item.equipmentId);
+        if (existing) {
+          existing.qty += item.qty;
+        } else {
+          equipmentMap.set(item.equipmentId, {
+            name: item.equipment.name,
+            qty: item.qty,
+          });
+        }
+      });
+    });
+
+    return {
+      id: b.id,
+      userEmail: b.user.email,
+      facilityName: b.facility.name,
+      facilityLocation: b.facility.location,
+      start: b.start.toISOString(),
+      end: b.end.toISOString(),
+      equipment: Array.from(equipmentMap.values()),
+    };
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -276,7 +326,7 @@ export default async function StaffPage() {
                 </p>
               </CardHeader>
               <CardContent>
-                <BookingsCalendar />
+                <BookingsCalendar bookings={bookingsForCalendar} />
               </CardContent>
             </Card>
           </TabsContent>

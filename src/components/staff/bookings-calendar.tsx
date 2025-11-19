@@ -1,6 +1,5 @@
-'use client';
+"use client";
 
-import { bookings, facilities } from '@/lib/data';
 import {
   Table,
   TableBody,
@@ -8,35 +7,70 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { CalendarIcon, ClockIcon, MapPinIcon } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { CalendarIcon, ClockIcon, MapPinIcon } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
-export function BookingsCalendar() {
+type EquipmentItem = {
+  name: string;
+  qty: number;
+};
+
+export type CalendarBooking = {
+  id: string;
+  userEmail: string;
+  facilityName: string;
+  facilityLocation: string;
+  start: string; // ISO string
+  end: string; // ISO string
+  equipment: EquipmentItem[];
+};
+
+type BookingsCalendarProps = {
+  bookings: CalendarBooking[];
+};
+
+export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [filterMode, setFilterMode] = useState<'all' | 'today' | 'custom'>(
-    'all'
+  const [filterMode, setFilterMode] = useState<"all" | "today" | "custom">(
+    "all"
   );
 
+  // Decorate bookings with date, startTime, duration for display and filtering
   const confirmedBookings = bookings
-    .filter((b) => b.status === 'confirmed')
+    .map((b) => {
+      const startDate = new Date(b.start);
+      const endDate = new Date(b.end);
+      const durationHours =
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+
+      return {
+        ...b,
+        date: startDate.toISOString(),
+        startTime: startDate.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        duration: Number(durationHours.toFixed(1)),
+      };
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const filteredBookings = confirmedBookings.filter((booking) => {
-    if (filterMode === 'all') return true;
+    if (filterMode === "all") return true;
 
-    if (filterMode === 'today') {
+    if (filterMode === "today") {
       const today = new Date();
       const bookingDate = new Date(booking.date);
       return (
@@ -46,7 +80,7 @@ export function BookingsCalendar() {
       );
     }
 
-    if (filterMode === 'custom' && selectedDate) {
+    if (filterMode === "custom" && selectedDate) {
       const bookingDate = new Date(booking.date);
       return (
         bookingDate.getDate() === selectedDate.getDate() &&
@@ -59,19 +93,19 @@ export function BookingsCalendar() {
   });
 
   const handleTodayFilter = () => {
-    setFilterMode('today');
+    setFilterMode("today");
     setSelectedDate(undefined);
   };
 
   const handleAllFilter = () => {
-    setFilterMode('all');
+    setFilterMode("all");
     setSelectedDate(undefined);
   };
 
   const handleCustomDate = (date: Date | undefined) => {
     setSelectedDate(date);
     if (date) {
-      setFilterMode('custom');
+      setFilterMode("custom");
     }
   };
 
@@ -93,14 +127,14 @@ export function BookingsCalendar() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          variant={filterMode === 'all' ? 'default' : 'outline'}
+          variant={filterMode === "all" ? "default" : "outline"}
           size="sm"
           onClick={handleAllFilter}
         >
           All Bookings
         </Button>
         <Button
-          variant={filterMode === 'today' ? 'default' : 'outline'}
+          variant={filterMode === "today" ? "default" : "outline"}
           size="sm"
           onClick={handleTodayFilter}
         >
@@ -109,12 +143,12 @@ export function BookingsCalendar() {
         <Popover>
           <PopoverTrigger asChild>
             <Button
-              variant={filterMode === 'custom' ? 'default' : 'outline'}
+              variant={filterMode === "custom" ? "default" : "outline"}
               size="sm"
-              className={cn('justify-start text-left font-normal')}
+              className={cn("justify-start text-left font-normal")}
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {selectedDate ? selectedDate.toLocaleDateString() : 'Pick a date'}
+              {selectedDate ? selectedDate.toLocaleDateString() : "Pick a date"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
@@ -126,10 +160,10 @@ export function BookingsCalendar() {
             />
           </PopoverContent>
         </Popover>
-        {filterMode !== 'all' && (
+        {filterMode !== "all" && (
           <Badge variant="secondary" className="ml-2">
             {filteredBookings.length} booking
-            {filteredBookings.length !== 1 ? 's' : ''}
+            {filteredBookings.length !== 1 ? "s" : ""}
           </Badge>
         )}
       </div>
@@ -141,9 +175,9 @@ export function BookingsCalendar() {
           </div>
           <h3 className="text-lg font-semibold mb-2">No bookings found</h3>
           <p className="text-muted-foreground">
-            {filterMode === 'today'
-              ? 'There are no bookings scheduled for today'
-              : 'There are no bookings for the selected date'}
+            {filterMode === "today"
+              ? "There are no bookings scheduled for today"
+              : "There are no bookings for the selected date"}
           </p>
         </div>
       ) : (
@@ -162,121 +196,111 @@ export function BookingsCalendar() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredBookings.map((booking) => {
-                  const facility = facilities.find(
-                    (f) => f.id === booking.facilityId
-                  );
-
-                  return (
-                    <TableRow key={booking.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{facility?.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {facility?.location}
-                          </p>
+                {filteredBookings.map((booking) => (
+                  <TableRow key={booking.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{booking.facilityName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {booking.facilityLocation}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>{booking.userEmail}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <CalendarIcon className="h-4 w-4 text-primary" />
+                        {new Date(booking.date).toLocaleDateString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <ClockIcon className="h-4 w-4 text-primary" />
+                        {booking.startTime}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        className="bg-primary/10 text-primary border-primary/20"
+                      >
+                        {booking.duration}h
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {booking.equipment.length > 0 ? (
+                        <div className="text-sm">
+                          {booking.equipment
+                            .map((e) => `${e.name} (${e.qty})`)
+                            .join(", ")}
                         </div>
-                      </TableCell>
-                      <TableCell>{booking.userEmail}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <CalendarIcon className="h-4 w-4 text-primary" />
-                          {new Date(booking.date).toLocaleDateString()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <ClockIcon className="h-4 w-4 text-primary" />
-                          {booking.startTime}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="secondary"
-                          className="bg-primary/10 text-primary border-primary/20"
-                        >
-                          {booking.duration}h
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {booking.equipment.length > 0 ? (
-                          <div className="text-sm">
-                            {booking.equipment.join(', ')}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">
-                            None
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                      ) : (
+                        <span className="text-muted-foreground text-sm">
+                          None
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
 
           {/* Mobile Card View */}
           <div className="md:hidden space-y-4">
-            {filteredBookings.map((booking) => {
-              const facility = facilities.find(
-                (f) => f.id === booking.facilityId
-              );
-
-              return (
-                <Card key={booking.id} className="p-4">
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="font-bold text-lg mb-1">
-                        {facility?.name}
-                      </h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <MapPinIcon className="h-4 w-4" />
-                        {facility?.location}
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Student</span>
-                        <span className="font-medium">{booking.userEmail}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Date</span>
-                        <span className="font-medium">
-                          {new Date(booking.date).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Time</span>
-                        <span className="font-medium">{booking.startTime}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Duration</span>
-                        <Badge
-                          variant="secondary"
-                          className="bg-primary/10 text-primary border-primary/20"
-                        >
-                          {booking.duration}h
-                        </Badge>
-                      </div>
-                      {booking.equipment.length > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Equipment
-                          </span>
-                          <span className="font-medium">
-                            {booking.equipment.length} items
-                          </span>
-                        </div>
-                      )}
+            {filteredBookings.map((booking) => (
+              <Card key={booking.id} className="p-4">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-bold text-lg mb-1">
+                      {booking.facilityName}
+                    </h3>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPinIcon className="h-4 w-4" />
+                      {booking.facilityLocation}
                     </div>
                   </div>
-                </Card>
-              );
-            })}
+
+                  <Separator />
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Student</span>
+                      <span className="font-medium">{booking.userEmail}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Date</span>
+                      <span className="font-medium">
+                        {new Date(booking.date).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Time</span>
+                      <span className="font-medium">{booking.startTime}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Duration</span>
+                      <Badge
+                        variant="secondary"
+                        className="bg-primary/10 text-primary border-primary/20"
+                      >
+                        {booking.duration}h
+                      </Badge>
+                    </div>
+                    {booking.equipment.length > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Equipment</span>
+                        <span className="font-medium">
+                          {booking.equipment
+                            .map((e) => `${e.name} (${e.qty})`)
+                            .join(", ")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
           </div>
         </>
       )}
