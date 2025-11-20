@@ -15,6 +15,8 @@ import { FilterIcon } from "lucide-react";
 interface FacilityFiltersProps {
   sportType: "all" | SportType;
   locationType: "all" | LocationType;
+  sportOptions: SportType[]; // new
+  locationOptions: LocationType[]; // new
   onSportTypeChange: (type: "all" | SportType) => void;
   onLocationTypeChange: (type: "all" | LocationType) => void;
 }
@@ -22,6 +24,8 @@ interface FacilityFiltersProps {
 export function FacilityFilters({
   sportType,
   locationType,
+  sportOptions,
+  locationOptions,
   onSportTypeChange,
   onLocationTypeChange,
 }: FacilityFiltersProps) {
@@ -41,46 +45,50 @@ export function FacilityFilters({
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 flex-1 w-full sm:w-auto">
+          {/* Sport type */}
           <Select
             value={sportType}
             onValueChange={(value) =>
               onSportTypeChange(value as "all" | SportType)
             }
           >
-            <SelectTrigger className="w-full sm:w-[180px] border-3 border-primary/20 focus:border-primary shadow-sm">
-              <SelectValue placeholder="Sport Type" />
+            <SelectTrigger className="w-full sm:w-[200px] border-3 border-primary/20 focus:border-primary shadow-sm">
+              <SelectValue placeholder="Sport type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Sports</SelectItem>
-              <SelectItem value="Basketball">Basketball</SelectItem>
-              <SelectItem value="Badminton">Badminton</SelectItem>
-              <SelectItem value="Tennis">Tennis</SelectItem>
-              <SelectItem value="Football">Football</SelectItem>
-              <SelectItem value="Volleyball">Volleyball</SelectItem>
-              <SelectItem value="Swimming">Swimming</SelectItem>
+              <SelectItem value="all">All sports</SelectItem>
+              {sportOptions.map((sport) => (
+                <SelectItem key={sport} value={sport}>
+                  {sport}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
+          {/* Location type */}
           <Select
             value={locationType}
             onValueChange={(value) =>
               onLocationTypeChange(value as "all" | LocationType)
             }
           >
-            <SelectTrigger className="w-full sm:w-[180px] border-3 border-primary/20 focus:border-primary shadow-sm">
-              <SelectValue placeholder="Location" />
+            <SelectTrigger className="w-full sm:w-[200px] border-3 border-primary/20 focus:border-primary shadow-sm">
+              <SelectValue placeholder="Location type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              <SelectItem value="Indoor">Indoor</SelectItem>
-              <SelectItem value="Outdoor">Outdoor</SelectItem>
+              <SelectItem value="all">All locations</SelectItem>
+              {locationOptions.map((loc) => (
+                <SelectItem key={loc} value={loc}>
+                  {loc}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
         {hasActiveFilters && (
           <Button variant="outline" size="sm" onClick={handleReset}>
-            Clear Filters
+            Clear filters
           </Button>
         )}
       </div>

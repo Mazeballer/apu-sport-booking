@@ -12,6 +12,7 @@ import type {
 import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { ChatWidget } from "@/components/chat-widget";
 
 export default function HomeClient({
   facilities,
@@ -22,6 +23,21 @@ export default function HomeClient({
   const [sportType, setSportType] = useState<"all" | SportType>("all");
   const [locationType, setLocationType] = useState<"all" | LocationType>("all");
   const [isLoading] = useState(false);
+
+  // unique sport types from facilities
+  const sportOptions = useMemo(
+    () => Array.from(new Set(facilities.map((f) => f.type))) as SportType[],
+    [facilities]
+  );
+
+  // unique location types from facilities
+  const locationOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(facilities.map((f) => f.locationType))
+      ) as LocationType[],
+    [facilities]
+  );
 
   // Map a DB row into the card shape when realtime events arrive
   function mapDbToCard(db: any): FacilityCardData {
@@ -107,10 +123,11 @@ export default function HomeClient({
             Browse and book available sports facilities at APU
           </p>
         </div>
-
         <FacilityFilters
           sportType={sportType}
           locationType={locationType}
+          sportOptions={sportOptions}
+          locationOptions={locationOptions}
           onSportTypeChange={setSportType}
           onLocationTypeChange={setLocationType}
         />
@@ -135,6 +152,7 @@ export default function HomeClient({
           </div>
         )}
       </main>
+      <ChatWidget />
     </div>
   );
 }
