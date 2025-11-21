@@ -1,14 +1,16 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { X, Send, Sparkles } from "lucide-react";
+import { X, Send, Sparkles, Mic, MicOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const SUGGESTED_QUESTIONS = [
   "What facilities are available today?",
@@ -19,6 +21,12 @@ const SUGGESTED_QUESTIONS = [
 
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [hoveringChat, setHoveringChat] = useState(false);
+
+  const [inputValue, setInputValue] = useState("");
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
@@ -26,21 +34,88 @@ export function ChatWidget() {
 
   const isLoading = status !== "ready";
 
+  // Lock page scroll while cursor is over the chat widget
+  useEffect(() => {
+    if (isOpen && hoveringChat) {
+      const previous = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = previous;
+      };
+    }
+  }, [isOpen, hoveringChat]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const AnyWindow = window as any;
+    const RecognitionClass =
+      AnyWindow.SpeechRecognition || AnyWindow.webkitSpeechRecognition;
+
+    if (!RecognitionClass) {
+      setSpeechSupported(false);
+      return;
+    }
+
+    const recognition = new RecognitionClass() as any;
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognition.onresult = (event: any) => {
+      let text = "";
+      for (let i = 0; i < event.results.length; i += 1) {
+        text += event.results[i][0].transcript + " ";
+      }
+      setInputValue(text.trim());
+    };
+
+    recognition.onerror = () => {
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    setSpeechSupported(true);
+
+    return () => {
+      recognition.stop();
+    };
+  }, []);
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = e.target as HTMLFormElement;
-    const input = form.elements.namedItem("chat-message") as HTMLInputElement;
-    const value = input.value.trim();
-
+    const value = inputValue.trim();
     if (!value) return;
-
     sendMessage({ text: value });
-    input.value = "";
+    setInputValue("");
   };
 
   const handleSuggestionClick = (question: string) => {
     if (isLoading) return;
     sendMessage({ text: question });
+  };
+
+  const toggleRecording = () => {
+    if (!speechSupported || !recognitionRef.current) {
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    setInputValue("");
+    setIsRecording(true);
+    try {
+      recognitionRef.current.start();
+    } catch {
+      setIsRecording(false);
+    }
   };
 
   return (
@@ -58,7 +133,11 @@ export function ChatWidget() {
 
       {/* Chat window */}
       {isOpen && (
-        <Card className="fixed bottom-8 right-8 w-[400px] h-[600px] flex flex-col min-h-0 shadow-2xl bg-white dark:bg-[#0f1419] border-gray-200 dark:border-gray-800">
+        <Card
+          className="fixed bottom-8 right-8 w-[400px] h-[600px] flex flex-col min-h-0 shadow-2xl bg-white dark:bg-[#0f1419] border-gray-200 dark:border-gray-800"
+          onMouseEnter={() => setHoveringChat(true)}
+          onMouseLeave={() => setHoveringChat(false)}
+        >
           {/* Header */}
           <div className="relative flex items-center justify-between p-4 bg-blue-600">
             <div className="flex items-center gap-3">
@@ -160,7 +239,10 @@ export function ChatWidget() {
                       }`}
                     >
                       {message.parts.map((part, index) => {
-                        if (part.type === "text") {
+                        if (part.type !== "text") return null;
+
+                        // User messages, plain text
+                        if (message.role === "user") {
                           return (
                             <p
                               key={index}
@@ -170,7 +252,46 @@ export function ChatWidget() {
                             </p>
                           );
                         }
-                        return null;
+
+                        // Assistant messages, render Markdown
+                        return (
+                          <div
+                            key={index}
+                            className="text-sm leading-relaxed prose prose-sm prose-slate dark:prose-invert max-w-none"
+                          >
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                p: ({ node, ...props }) => (
+                                  <p className="mb-1 last:mb-0" {...props} />
+                                ),
+                                ul: ({ node, ...props }) => (
+                                  <ul
+                                    className="list-disc pl-4 mb-1"
+                                    {...props}
+                                  />
+                                ),
+                                ol: ({ node, ...props }) => (
+                                  <ol
+                                    className="list-decimal pl-4 mb-1"
+                                    {...props}
+                                  />
+                                ),
+                                li: ({ node, ...props }) => (
+                                  <li className="mb-0.5" {...props} />
+                                ),
+                                strong: ({ node, ...props }) => (
+                                  <strong
+                                    className="font-semibold"
+                                    {...props}
+                                  />
+                                ),
+                              }}
+                            >
+                              {part.text}
+                            </ReactMarkdown>
+                          </div>
+                        );
                       })}
                     </div>
                   </div>
@@ -222,7 +343,7 @@ export function ChatWidget() {
             autoComplete="off"
             className="p-4 bg-white dark:bg-[#0a0f1e] border-t border-gray-200 dark:border-gray-800"
           >
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <Input
                 name="chat-message"
                 placeholder="Ask about facilities, bookings..."
@@ -230,8 +351,31 @@ export function ChatWidget() {
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="none"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
                 className="flex-1 bg-gray-50 dark:bg-[#0f1419] border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-600 rounded-full px-4 h-11"
               />
+
+              {/* Voice button */}
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                disabled={!speechSupported || isLoading}
+                onClick={toggleRecording}
+                className={`h-11 w-11 rounded-full border ${
+                  isRecording
+                    ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
+                    : "border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200"
+                }`}
+              >
+                {isRecording ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+
               <Button
                 type="submit"
                 size="icon"

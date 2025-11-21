@@ -292,7 +292,18 @@ export function EquipmentManagement({
                       <p className="text-sm text-muted-foreground">
                         Total Stock
                       </p>
-                      <p className="font-medium mt-1">{eq.qtyTotal}</p>
+                      <Badge
+                        variant={
+                          eq.qtyAvailable === 0
+                            ? "destructive"
+                            : eq.qtyAvailable < 3
+                            ? "secondary"
+                            : "default"
+                        }
+                        className="mt-1"
+                      >
+                        {eq.qtyTotal}
+                      </Badge>
                     </div>
                   </div>
 

@@ -218,8 +218,14 @@ export function InventoryList({
                   <div>
                     <p className="text-muted-foreground mb-1">Total Stock</p>
                     <Badge
-                      variant="default"
-                      className="bg-primary text-white rounded-full"
+                      variant={
+                        eq.qtyAvailable === 0
+                          ? "destructive"
+                          : eq.qtyAvailable < 3
+                          ? "secondary"
+                          : "default"
+                      }
+                      className="mt-1"
                     >
                       {eq.qtyTotal}
                     </Badge>
