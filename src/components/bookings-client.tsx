@@ -65,6 +65,19 @@ interface BookingsClientProps {
   }) => Promise<ExistingBookingForDialog[]>;
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export function BookingsClient({
   bookings,
   onReschedule,
@@ -178,9 +191,7 @@ export function BookingsClient({
     if (!checked) {
       setPushEnabled(false);
       window.localStorage.setItem("apu-push-enabled", "false");
-      notify.info(
-        "Booking notifications are turned off. You will still receive email reminders if available."
-      );
+      notify.warning("Booking notifications disabled"); 
       return;
     }
 
@@ -189,36 +200,70 @@ export function BookingsClient({
       notify.error("Your browser does not support push notifications.");
       return;
     }
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      notify.error("Push notifications are not available in this browser.");
+      return;
+    }
 
     setIsCheckingPush(true);
     try {
       const permission = await Notification.requestPermission();
 
-      if (permission === "granted") {
-        setPushEnabled(true);
-        window.localStorage.setItem("apu-push-enabled", "true");
-        notify.success(
-          "Push notifications enabled. We will remind you before your upcoming bookings on this device."
-        );
-
-        // Future place to register a push subscription with your backend
-      } else if (permission === "denied") {
+      if (permission !== "granted") {
         setPushEnabled(false);
         window.localStorage.setItem("apu-push-enabled", "false");
-        notify.error(
-          "Notifications are blocked in your browser settings. Please enable them if you want booking alerts."
-        );
-      } else {
-        setPushEnabled(false);
-        window.localStorage.setItem("apu-push-enabled", "false");
-        notify.info(
-          "Notification permission was not granted. You can try turning it on again later."
-        );
+        notify.info("Notification permission was not granted.");
+        return;
       }
+
+      const reg = await navigator.serviceWorker.ready;
+
+      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!publicKey) {
+        throw new Error("Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+      }
+
+      const applicationServerKey = urlBase64ToUint8Array(publicKey);
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+
+      // Send subscription to backend
+      const res = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save subscription");
+      }
+
+      setPushEnabled(true);
+      window.localStorage.setItem("apu-push-enabled", "true");
+      notify.success("Push notifications enabled  ");
+    } catch (err: any) {
+      console.error(err);
+      setPushEnabled(false);
+      window.localStorage.setItem("apu-push-enabled", "false");
+      notify.error(
+        err.message || "Failed to enable push notifications on this device."
+      );
     } finally {
       setIsCheckingPush(false);
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("apu-push-enabled");
+    if (stored === "true") {
+      setPushEnabled(true);
+    }
+  }, []);
 
   return (
     <AuthGuard>
@@ -257,15 +302,8 @@ export function BookingsClient({
                 <Switch
                   id="push-notifications"
                   checked={pushEnabled}
-                  onCheckedChange={(checked) => {
-                    setPushEnabled(checked);
-
-                    if (checked) {
-                      notify.success("Notifications enabled for this device");
-                    } else {
-                      notify.warning("Notifications turned off");
-                    }
-                  }}
+                  disabled={isCheckingPush}
+                  onCheckedChange={handleTogglePush}
                 />
               </div>
             </CardContent>

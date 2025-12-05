@@ -75,6 +75,7 @@ model Booking {
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
   reminderEmailSentAt DateTime?
+  weatherAlertSentAt DateTime?
 
 
   facility   Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
