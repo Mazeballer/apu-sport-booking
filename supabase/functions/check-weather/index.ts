@@ -76,8 +76,56 @@ serve(async () => {
   console.log("Weather data received successfully");
 
   // 3. For each booking, check weather for its hour
+  // for (const booking of bookings) {
+  //   console.log(`Checking booking ${booking.id} for user ${booking.userId}`);
+
+  //   const start = new Date(booking.start);
+  //   const hourIndex = start.getHours();
+  //   const probability = hourly[hourIndex];
+
+  //   console.log(
+  //     `Booking at ${booking.start} has rain probability ${probability}%`
+  //   );
+  //   //probability >= 50
+  //   if (true) {
+  //     console.log(
+  //       `Rain probability high for booking ${booking.id}, sending push notification`
+  //     );
+
+  //     try {
+  //       const pushRes = await fetch(`${siteUrl}/api/push/send`, {
+  //         method: "POST",
+  //         headers: { "Content-Type": "application/json" },
+  //         body: JSON.stringify({
+  //           userId: booking.userId,
+  //           facilityName: booking.Facility.name,
+  //           startISO: booking.start,
+  //           rainProbability: probability / 100,
+  //           description: "High chance of rain expected",
+  //         }),
+  //       });
+
+  //       if (!pushRes.ok) {
+  //         const msg = await pushRes.text();
+  //         console.error(
+  //           `Push API responded with error. Status: ${pushRes.status}, StatusText: ${pushRes.statusText}, Body: ${msg}`
+  //         );
+  //       } else {
+  //         console.log(`Push notification sent for booking ${booking.id}`);
+  //       }
+  //     } catch (err) {
+  //       console.error("Failed to send push notification:", err);
+  //     }
+  //   } else {
+  //     console.log(
+  //       `Rain probability too low for booking ${booking.id}, skipping notification`
+  //     );
+  //   }
+  // }
+
+  // 3. For each booking, check weather for its hour
   for (const booking of bookings) {
-    console.log(`Checking booking ${booking.id} for user ${booking.userId}`);
+    console.log(`Checking booking ${booking.id}`);
 
     const start = new Date(booking.start);
     const hourIndex = start.getHours();
@@ -86,40 +134,33 @@ serve(async () => {
     console.log(
       `Booking at ${booking.start} has rain probability ${probability}%`
     );
-    //probability >= 50
-    if (true) {
-      console.log(
-        `Rain probability high for booking ${booking.id}, sending push notification`
-      );
 
-      try {
-        const pushRes = await fetch(`${siteUrl}/api/push/send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: booking.userId,
-            facilityName: booking.Facility.name,
-            startISO: booking.start,
-            rainProbability: probability / 100,
-            description: "High chance of rain expected",
-          }),
-        });
+    // Force test mode, ignore real user ID
+    const testUserId = "1f9e10a0-4ea6-4900-81c9-1db746f9b291";
 
-        if (!pushRes.ok) {
-          const msg = await pushRes.text();
-          console.error(
-            `Push API responded with error. Status: ${pushRes.status}, StatusText: ${pushRes.statusText}, Body: ${msg}`
-          );
-        } else {
-          console.log(`Push notification sent for booking ${booking.id}`);
-        }
-      } catch (err) {
-        console.error("Failed to send push notification:", err);
+    console.log("Sending TEST push to:", testUserId);
+
+    try {
+      const pushRes = await fetch(`${siteUrl}/api/push/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: testUserId,
+          facilityName: booking.Facility.name,
+          startISO: booking.start,
+          rainProbability: probability / 100,
+          description: "High chance of rain expected from cron",
+        }),
+      });
+
+      if (!pushRes.ok) {
+        const msg = await pushRes.text();
+        console.error("Push API responded with error:", msg);
+      } else {
+        console.log("TEST push notification sent successfully!");
       }
-    } else {
-      console.log(
-        `Rain probability too low for booking ${booking.id}, skipping notification`
-      );
+    } catch (err) {
+      console.error("Failed to send TEST push notification:", err);
     }
   }
 
