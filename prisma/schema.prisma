@@ -7,9 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// ===========================
 /// Users
-/// ===========================
 model User {
   id        String             @id @default(uuid())
   email     String             @unique
@@ -24,9 +22,8 @@ model User {
   pushSubs  PushSubscription[]
 }
 
-/// ===========================
 /// Facility Management
-/// ===========================
+
 model Facility {
   id             String      @id @default(uuid())
   name           String
@@ -50,9 +47,8 @@ model Facility {
   equipment Equipment[]
 }
 
-/// ===========================
 /// Courts
-/// ===========================
+
 model Court {
   id         String    @id @default(uuid())
   facilityId String
@@ -66,9 +62,8 @@ model Court {
   @@index([facilityId])
 }
 
-/// ===========================
 /// Bookings
-/// ===========================
+
 model Booking {
   id         String        @id @default(uuid())
   userId     String
@@ -79,6 +74,8 @@ model Booking {
   status     BookingStatus  @default(confirmed)
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
+  reminderEmailSentAt DateTime?
+
 
   facility   Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   court      Court          @relation(fields: [courtId], references: [id], onDelete: Cascade)
@@ -89,6 +86,7 @@ model Booking {
   @@index([facilityId, start])
   @@index([courtId, start])
   @@index([userId, start])
+  @@index([start, status, reminderEmailSentAt])
 }
 
 /// ===========================

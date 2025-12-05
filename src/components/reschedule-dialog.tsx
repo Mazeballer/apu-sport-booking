@@ -114,6 +114,9 @@ export function RescheduleDialog({
     const now = new Date();
     const isToday = sameDay(newDate, now);
 
+    // Build a Date for the facility closing time on the selected day
+    const closeDateTime = buildDateAtTime(newDate, closeTime);
+
     return timeSlots.filter((slot) => {
       const slotStart = buildDateAtTime(newDate, slot);
 
@@ -123,6 +126,11 @@ export function RescheduleDialog({
       }
 
       const slotEnd = addHours(slotStart, booking.durationHours);
+
+      // do not allow slots that would end after closing time
+      if (slotEnd > closeDateTime) {
+        return false;
+      }
 
       const clash = existingBookings.some((b) => {
         if (b.status === "cancelled") return false;
@@ -136,7 +144,7 @@ export function RescheduleDialog({
 
       return !clash;
     });
-  }, [timeSlots, newDate, booking.durationHours, existingBookings]);
+  }, [timeSlots, newDate, booking.durationHours, existingBookings, closeTime]);
 
   const handleReschedule = async () => {
     if (!newDate || !newTime) return;

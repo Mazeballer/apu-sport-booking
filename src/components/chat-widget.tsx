@@ -27,12 +27,23 @@ export function ChatWidget() {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
 
   const isLoading = status !== "ready";
+
+  // Auto scroll to bottom on new messages or when chat opens
+  useEffect(() => {
+    if (!bottomRef.current) return;
+
+    bottomRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [messages.length, isOpen]);
 
   // Lock page scroll while cursor is over the chat widget
   useEffect(() => {
@@ -45,6 +56,7 @@ export function ChatWidget() {
     }
   }, [isOpen, hoveringChat]);
 
+  // Speech recognition setup
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -118,6 +130,51 @@ export function ChatWidget() {
     }
   };
 
+  // Dynamic follow up suggestions based on the last user message
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === "user");
+
+  const followUpSuggestions = (() => {
+    if (!lastUserMessage) return [];
+
+    const text = lastUserMessage.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as any).text as string)
+      .join(" ")
+      .toLowerCase();
+
+    if (text.includes("available") || text.includes("time")) {
+      return [
+        "Can you help me book one of these times?",
+        "What equipment can I borrow for this facility?",
+        "What happens if I cancel this booking?",
+      ];
+    }
+
+    if (text.includes("book") || text.includes("reserve")) {
+      return [
+        "Can you summarise my booking details?",
+        "What are the rules for this facility?",
+        "Show me other available times for this facility.",
+      ];
+    }
+
+    if (text.includes("equipment") || text.includes("borrow")) {
+      return [
+        "Do I need to return the equipment at the same place?",
+        "Are there any penalties for late returns?",
+        "What facilities can I use this equipment for?",
+      ];
+    }
+
+    return [
+      "What facilities can I book today?",
+      "What happens if I do not show up?",
+      "How do I reschedule my booking?",
+    ];
+  })();
+
   return (
     <>
       {/* Floating chat button */}
@@ -167,14 +224,28 @@ export function ChatWidget() {
                 </p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsOpen(false)}
-              className="h-8 w-8 text-white hover:bg-white/20 rounded-full"
-            >
-              <X className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setMessages([]);
+                  setInputValue("");
+                }}
+                className="h-8 px-3 text-xs text-white bg-white/10 hover:bg-white/20 rounded-full"
+              >
+                Reset
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsOpen(false)}
+                className="h-8 w-8 text-white hover:bg-white/20 rounded-full"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
 
           {/* Messages + suggestions */}
@@ -334,6 +405,23 @@ export function ChatWidget() {
                   </div>
                 </div>
               )}
+
+              {messages.length > 0 && followUpSuggestions.length > 0 && (
+                <div className="pt-2 flex flex-wrap gap-2">
+                  {followUpSuggestions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => handleSuggestionClick(q)}
+                      className="text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div ref={bottomRef} />
             </div>
           </ScrollArea>
 

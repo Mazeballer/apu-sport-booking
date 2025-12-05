@@ -1,7 +1,7 @@
 // components/bookings-client.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AuthGuard } from "@/components/auth-guard";
 import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,6 +108,7 @@ export function BookingsClient({
   const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [isCheckingPush, setIsCheckingPush] = useState(false);
   const [existingForDialog, setExistingForDialog] = useState<
     ExistingBookingForDialog[]
   >([]);
@@ -170,6 +171,55 @@ export function BookingsClient({
     }
   };
 
+  const handleTogglePush = async (checked: boolean) => {
+    if (typeof window === "undefined") return;
+
+    // Turning off
+    if (!checked) {
+      setPushEnabled(false);
+      window.localStorage.setItem("apu-push-enabled", "false");
+      notify.info(
+        "Booking notifications are turned off. You will still receive email reminders if available."
+      );
+      return;
+    }
+
+    // Turning on
+    if (!("Notification" in window)) {
+      notify.error("Your browser does not support push notifications.");
+      return;
+    }
+
+    setIsCheckingPush(true);
+    try {
+      const permission = await Notification.requestPermission();
+
+      if (permission === "granted") {
+        setPushEnabled(true);
+        window.localStorage.setItem("apu-push-enabled", "true");
+        notify.success(
+          "Push notifications enabled. We will remind you before your upcoming bookings on this device."
+        );
+
+        // Future place to register a push subscription with your backend
+      } else if (permission === "denied") {
+        setPushEnabled(false);
+        window.localStorage.setItem("apu-push-enabled", "false");
+        notify.error(
+          "Notifications are blocked in your browser settings. Please enable them if you want booking alerts."
+        );
+      } else {
+        setPushEnabled(false);
+        window.localStorage.setItem("apu-push-enabled", "false");
+        notify.info(
+          "Notification permission was not granted. You can try turning it on again later."
+        );
+      }
+    } finally {
+      setIsCheckingPush(false);
+    }
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-background">
@@ -183,7 +233,7 @@ export function BookingsClient({
             </p>
           </div>
 
-          {/* Push reminders card */}
+          {/* Push notifications card */}
           <Card className="mb-6 rounded-2xl shadow-md">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between gap-4">
@@ -196,17 +246,26 @@ export function BookingsClient({
                       htmlFor="push-notifications"
                       className="text-base font-semibold cursor-pointer"
                     >
-                      Push Reminders
+                      Booking notifications
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Get a reminder 2 hours before your booking
+                      To receive notifications, install this app as a PWA on
+                      your device
                     </p>
                   </div>
                 </div>
                 <Switch
                   id="push-notifications"
                   checked={pushEnabled}
-                  onCheckedChange={setPushEnabled}
+                  onCheckedChange={(checked) => {
+                    setPushEnabled(checked);
+
+                    if (checked) {
+                      notify.success("Notifications enabled for this device");
+                    } else {
+                      notify.warning("Notifications turned off");
+                    }
+                  }}
                 />
               </div>
             </CardContent>

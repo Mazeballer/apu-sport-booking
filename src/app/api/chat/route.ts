@@ -119,6 +119,42 @@ function extractDate(text: string): string | null {
 }
 
 /* -----------------------------
+   Helper: get requested date from convo
+   looks at last message first, then walks back
+------------------------------ */
+function getRequestedDateFromConversation(
+  uiMessages: UIMessage[],
+  lastUserText: string | undefined,
+  today: string
+): string {
+  // 1) Try the last user message text
+  if (lastUserText) {
+    const d = extractDate(lastUserText);
+    if (d) return d;
+  }
+
+  // 2) Walk backwards through earlier user messages
+  for (let i = uiMessages.length - 1; i >= 0; i -= 1) {
+    const m = uiMessages[i];
+    if (m.role !== "user") continue;
+
+    const text = m.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as any).text as string)
+      .join(" ")
+      .trim();
+
+    if (!text) continue;
+
+    const d = extractDate(text);
+    if (d) return d;
+  }
+
+  // 3) Fallback to today
+  return today;
+}
+
+/* -----------------------------
    Helper: facility aware question
 ------------------------------ */
 function getFacilityAwareQuestionText(
@@ -252,6 +288,10 @@ export async function POST(req: Request) {
       const cancelNoRegex =
         /^(no|nah|nope|cancel|do not book|dont book|don't book)\b/i;
 
+      // detect if the user mentioned a specific clock time like 8am, 7:00, 19:00
+      const explicitTimeRegex = /\b(\d{1,2})(:\d{2})?\s*(am|pm)\b/i;
+      const hasExplicitTime = explicitTimeRegex.test(lastUserText);
+
       const isFacilitiesQuestion =
         facilitiesQuestionRegex.test(lastUserText) ||
         listFacilitiesRegex.test(lastUserText);
@@ -276,32 +316,31 @@ export async function POST(req: Request) {
       const today = new Date().toISOString().split("T")[0];
 
       // 1. Handle explicit confirmation first
-      // 1. Handle explicit confirmation first
       if (isConfirm) {
-        const bookingQuestionText = getLastBookingIntentQuestion(
-          uiMessages,
-          bookingIntentRegex
-        );
+        // collect all user texts in the conversation
+        const userTexts: string[] = [];
 
-        // also consider the latest user message (like "yes basketball court")
-        const confirmText = lastUserText;
+        for (const m of uiMessages) {
+          if (m.role !== "user") continue;
+          const text = m.parts
+            .filter((p) => p.type === "text")
+            .map((p) => (p as any).text as string)
+            .join(" ")
+            .trim();
+          if (text) userTexts.push(text);
+        }
 
-        // combine both so the suggestion logic sees all context
-        let combinedText = "";
-        if (bookingQuestionText) {
-          combinedText = bookingQuestionText;
-        }
-        if (confirmText && confirmText !== bookingQuestionText) {
-          combinedText = combinedText
-            ? `${combinedText} ${confirmText}`
-            : confirmText;
-        }
+        const combinedText = userTexts.join(" ");
 
         if (!combinedText) {
           dynamicContext =
             'You said yes, but I do not know which facility and time you want to book. Please say something like: "Book tennis tomorrow at 6pm".';
         } else {
-          const requestedDate = extractDate(combinedText) ?? today;
+          const requestedDate = getRequestedDateFromConversation(
+            uiMessages,
+            combinedText,
+            today
+          );
 
           const suggestion = await getBookingSuggestionFromQuestion({
             questionText: combinedText,
@@ -309,7 +348,7 @@ export async function POST(req: Request) {
           });
 
           if (!suggestion) {
-            dynamicContext = `I could not find any active facility matching your request: "${combinedText}".`;
+            dynamicContext = `I could not find any active facility matching your request.`;
           } else if (suggestion.reason) {
             dynamicContext = suggestion.reason;
           } else {
@@ -349,13 +388,19 @@ You can view this in the My Bookings section of the app.`;
       }
 
       // 4. Availability questions
+      // Now only triggers for pure availability questions,
+      // not for booking intent messages like "help me book"
       if (
         !dynamicContext &&
         !isFacilitiesQuestion &&
         hasAvailabilityKeyword &&
         !hasBookingIntent
       ) {
-        const requestedDate = extractDate(lastUserText) ?? today;
+        const requestedDate = getRequestedDateFromConversation(
+          uiMessages,
+          lastUserText,
+          today
+        );
 
         const facilityQuestionText = getFacilityAwareQuestionText(
           uiMessages,
@@ -371,7 +416,9 @@ You can view this in the My Bookings section of the app.`;
           if (facilityNames.length === 0) {
             dynamicContext = `You asked about availability on ${requestedDate}, but there are no active facilities in the database. Ask the sports admin for help.`;
           } else {
-            dynamicContext = `You asked about availability on ${requestedDate}, but did not specify a facility.
+            dynamicContext = `I did not fully understand your availability question.
+
+You want to know about availability around ${requestedDate}, but the system could not clearly detect which facility you mean.
 
 These are the active facilities in the system:
 ${facilityNames.join("\n")}
@@ -436,15 +483,46 @@ Ask about one facility at a time, for example:
         }
       }
 
-      // 5. Booking intent questions (not simple yes or no)
+      // 4.5 Booking intent but missing explicit time
+      // Example: "Can you help me book one of these times?"
+      if (
+        !dynamicContext &&
+        hasBookingIntent &&
+        !hasExplicitTime &&
+        !isConfirm &&
+        !isCancel
+      ) {
+        const requestedDate = getRequestedDateFromConversation(
+          uiMessages,
+          lastUserText,
+          today
+        );
+
+        dynamicContext = `You want to make a booking around ${requestedDate}, but I do not have enough information yet.
+
+Please tell me:
+- Which facility you want to book, for example "Basketball Court" or "Tennis"
+- What time you want, for example "8pm" or "5pm"
+
+For example:
+- "Book Basketball Court tomorrow at 8am"
+- "Help me book Tennis on ${requestedDate} at 6pm"`;
+      }
+
+      // 5. Booking intent questions with explicit time (not simple yes or no)
       if (
         !dynamicContext &&
         !isFacilitiesQuestion &&
         hasBookingIntent &&
+        hasExplicitTime &&
         !isConfirm &&
         !isCancel
       ) {
-        const requestedDate = extractDate(lastUserText) ?? today;
+        const requestedDate = getRequestedDateFromConversation(
+          uiMessages,
+          lastUserText,
+          today
+        );
 
         const facilityQuestionText = getFacilityAwareQuestionText(
           uiMessages,
@@ -460,8 +538,9 @@ Ask about one facility at a time, for example:
           if (facilityNames.length === 0) {
             dynamicContext = `You want to make a booking on ${requestedDate}, but there are no active facilities in the system yet.`;
           } else {
-            dynamicContext = `You want to make a booking on ${requestedDate}, but you did not specify which facility.
+            dynamicContext = `I did not fully understand your question.
 
+You asked about a booking around ${requestedDate}, but the system could not clearly detect which facility you mean.
 Active facilities:
 ${facilityNames.join("\n")}
 
@@ -478,6 +557,8 @@ Please say something like:
           if (!suggestion) {
             dynamicContext = `I could not find any active facility matching "${facilityQuestionText}".`;
           } else if (suggestion.reason) {
+            // This is where messages like
+            // "no available booking slots at 8am" come from
             dynamicContext = suggestion.reason;
           } else if (suggestion.isExactMatch) {
             dynamicContext = `The requested time ${suggestion.requestedTimeLabel} is available for "${suggestion.facilityName}" on ${suggestion.date}.

@@ -131,7 +131,7 @@ export default async function StaffPage() {
     id: req.id,
     userEmail: req.booking.user.email,
     facilityName: req.booking.facility.name,
-    requestDate: req.createdAt.toISOString(),
+    requestDate: req.booking.start.toISOString(),
     notes: req.note,
     equipmentName:
       req.items.length > 0

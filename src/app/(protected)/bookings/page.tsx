@@ -153,6 +153,7 @@ export default async function BookingsPage() {
         start: newStart,
         end: newEnd,
         status: "rescheduled",
+        reminderEmailSentAt: null,
       },
     });
 
