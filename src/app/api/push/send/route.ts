@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendPushToUser } from "@/lib/push";
-import { generateWeatherMessage } from "@/lib/aiWeatherMessage";
+import { generateWeatherMessage } from "@/lib/ai/aiWeatherMessage";
 
 export async function POST(req: Request) {
   try {
