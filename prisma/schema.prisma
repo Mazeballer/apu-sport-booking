@@ -41,6 +41,7 @@ model Facility {
   bookings       Booking[]
   courts         Court[]
   equipment      Equipment[]
+  notificationLogs FacilityNotificationLog[]
 }
 
 model Court {
@@ -78,9 +79,6 @@ model Booking {
   @@index([start, status, reminderEmailSentAt])
 }
 
-/// ===========================
-/// Equipment
-/// ===========================
 model Equipment {
   id           String                 @id @default(uuid())
   facilityId   String
@@ -93,9 +91,6 @@ model Equipment {
   @@index([facilityId, name])
 }
 
-/// ===========================
-/// Equipment Requests
-/// ===========================
 model EquipmentRequest {
   id         String                 @id @default(uuid())
   bookingId  String
@@ -112,9 +107,6 @@ model EquipmentRequest {
   @@index([status, createdAt])
 }
 
-/// ===========================
-/// Equipment Request Items
-/// ===========================
 model EquipmentRequestItem {
   id          String                @id @default(uuid())
   requestId   String
@@ -132,9 +124,6 @@ model EquipmentRequestItem {
   @@index([equipmentId])
 }
 
-/// ===========================
-/// Push Subscriptions
-/// ===========================
 model PushSubscription {
   id        String   @id @default(uuid())
   userId    String
@@ -145,6 +134,19 @@ model PushSubscription {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model FacilityNotificationLog {
+  id         String   @id @default(uuid())
+  facilityId String
+  kind       String   // "closed", "reopened", "hours_changed"
+  createdAt  DateTime @default(now())
+  processed  Boolean  @default(false)
+
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, kind, createdAt])
+  @@index([processed, createdAt])
 }
 
 /// ===========================

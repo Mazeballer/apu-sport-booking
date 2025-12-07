@@ -191,7 +191,7 @@ export function BookingsClient({
     if (!checked) {
       setPushEnabled(false);
       window.localStorage.setItem("apu-push-enabled", "false");
-      notify.warning("Booking notifications disabled"); 
+      notify.warning("Booking notifications disabled");
       return;
     }
 
@@ -291,7 +291,7 @@ export function BookingsClient({
                       htmlFor="push-notifications"
                       className="text-base font-semibold cursor-pointer"
                     >
-                      Booking notifications
+                      Notifications
                     </Label>
                     <p className="text-sm text-muted-foreground">
                       To receive notifications, install this app as a PWA on

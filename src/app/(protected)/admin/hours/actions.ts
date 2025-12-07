@@ -1,9 +1,11 @@
+// src/app/(protected)/admin/hours/action.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/authz";
 import { z } from "zod";
+import { notifyFacilityChange } from "@/lib/notify/facilityNotify";
 
 export type HoursActionResult = { ok: boolean; message?: string };
 
@@ -35,14 +37,32 @@ export async function updateFacilityHours(
   const { facilityId, openTime, closeTime } = parsed.data;
 
   try {
-    await prisma.facility.update({
+    const before = await prisma.facility.findUnique({
+      where: { id: facilityId },
+    });
+    if (!before) {
+      return { ok: false, message: "Facility not found" };
+    }
+
+    const after = await prisma.facility.update({
       where: { id: facilityId },
       data: { openTime, closeTime },
     });
+
+    const timesChanged =
+      before.openTime !== after.openTime ||
+      before.closeTime !== after.closeTime;
+
+    if (timesChanged) {
+      await notifyFacilityChange({
+        kind: "hours_changed",
+        facility: after,
+      });
+    }
+
+    revalidatePath("/admin");
+    return { ok: true };
   } catch (e: any) {
     return { ok: false, message: e?.message ?? "Failed to update hours" };
   }
-
-  revalidatePath("/admin");
-  return { ok: true };
 }

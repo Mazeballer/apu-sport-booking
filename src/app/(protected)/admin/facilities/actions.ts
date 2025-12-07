@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { notifyFacilityChange } from "@/lib/notify/facilityNotify";
 
 const BUCKET = "facility-photos";
 const FACILITY_TAG = "facilities";
@@ -186,7 +187,22 @@ export async function deleteFacilityAction(id: string) {
 }
 
 export async function toggleFacilityActiveAction(id: string, active: boolean) {
-  await prisma.facility.update({ where: { id }, data: { active } });
+  const before = await prisma.facility.findUnique({
+    where: { id },
+  });
+  if (!before) throw new Error("Facility not found");
+
+  const after = await prisma.facility.update({
+    where: { id },
+    data: { active },
+  });
+
+  // Queue notification instead of sending immediately
+  await notifyFacilityChange({
+    kind: active ? "reopened" : "closed",
+    facility: after,
+  });
+
   revalidatePath("/admin");
 }
 
@@ -318,8 +334,16 @@ export async function updateFacilityFromForm(
 
     const existing = await prisma.facility.findUnique({
       where: { id },
-      select: { name: true, photos: true, numberOfCourts: true },
+      select: {
+        name: true,
+        photos: true,
+        numberOfCourts: true,
+        openTime: true,
+        closeTime: true,
+        active: true,
+      },
     });
+
     if (!existing) return { ok: false, message: "Facility not found" };
 
     const name = fd.get("name")?.toString();
@@ -387,6 +411,39 @@ export async function updateFacilityFromForm(
 
       await syncFacilityCourts(tx, id, effectiveCourts);
     });
+
+    // After update, load the fresh facility snapshot
+    const updated = await prisma.facility.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        openTime: true,
+        closeTime: true,
+        active: true,
+      },
+    });
+
+    if (updated) {
+      const hoursChanged =
+        updated.openTime !== existing.openTime ||
+        updated.closeTime !== existing.closeTime;
+
+      if (hoursChanged) {
+        await notifyFacilityChange({
+          kind: "hours_changed",
+          facility: updated,
+          before: {
+            id,
+            name: existing.name,
+            openTime: existing.openTime,
+            closeTime: existing.closeTime,
+            active: existing.active,
+          },
+          after: updated,
+        });
+      }
+    }
 
     revalidatePath("/admin");
     return { ok: true };
