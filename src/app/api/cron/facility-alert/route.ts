@@ -5,8 +5,8 @@ import { generateFacilityMessage } from "@/lib/ai/facilityMessage";
 import { sendPushToUser } from "@/lib/push";
 import type { FacilityChangeKind } from "@/lib/notify/facilityNotify";
 
-const BUFFER_MINUTES = 0; // admin can make multiple edits
-const SPAM_MINUTES = 0; // do not notify same facility twice
+const BUFFER_MINUTES = 10; // admin can make multiple edits
+const SPAM_MINUTES = 30; // do not notify same facility twice
 
 export async function GET() {
   const now = new Date();
