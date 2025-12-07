@@ -5,7 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { notifyFacilityChange } from "@/lib/notify/facilityNotify";
+import {
+  notifyFacilityChange,
+  type FacilityChangeKind,
+} from "@/lib/notify/facilityNotify";
 
 const BUCKET = "facility-photos";
 const FACILITY_TAG = "facilities";
@@ -200,7 +203,13 @@ export async function toggleFacilityActiveAction(id: string, active: boolean) {
   // Queue notification instead of sending immediately
   await notifyFacilityChange({
     kind: active ? "reopened" : "closed",
-    facility: after,
+    facility: {
+      id: after.id,
+      name: after.name,
+      openTime: after.openTime,
+      closeTime: after.closeTime,
+      active: after.active,
+    },
   });
 
   revalidatePath("/admin");
@@ -332,20 +341,30 @@ export async function updateFacilityFromForm(
     const id = String(fd.get("id") ?? "");
     if (!id) return { ok: false, message: "Missing facility id" };
 
+    // 1. Load the current values so we can compare later
     const existing = await prisma.facility.findUnique({
       where: { id },
       select: {
+        id: true,
         name: true,
         photos: true,
         numberOfCourts: true,
         openTime: true,
         closeTime: true,
         active: true,
+        type: true,
+        location: true,
+        locationType: true,
+        description: true,
+        capacity: true,
+        isMultiSport: true,
+        sharedSports: true,
+        rules: true,
       },
     });
-
     if (!existing) return { ok: false, message: "Facility not found" };
 
+    // 2. Read form values
     const name = fd.get("name")?.toString();
     const type = fd.get("type")?.toString();
     const location = fd.get("location")?.toString();
@@ -369,6 +388,13 @@ export async function updateFacilityFromForm(
       ? (JSON.parse(String(fd.get("rules"))) as string[])
       : undefined;
 
+    // handle "active" coming from the edit form
+    const activeRaw = fd.get("active");
+    const active =
+      activeRaw != null
+        ? String(activeRaw) === "true" || String(activeRaw) === "on"
+        : undefined;
+
     const facilityImage = fd.get("facilityImage") as File | null;
     const layoutImage = fd.get("layoutImage") as File | null;
 
@@ -389,6 +415,7 @@ export async function updateFacilityFromForm(
         ? numberOfCourtsRaw
         : existing.numberOfCourts ?? 1;
 
+    // 3. Apply DB update
     await prisma.$transaction(async (tx) => {
       await tx.facility.update({
         where: { id },
@@ -405,6 +432,7 @@ export async function updateFacilityFromForm(
           ...(sharedSports ? { sharedSports } : {}),
           ...(effectiveCourts ? { numberOfCourts: effectiveCourts } : {}),
           ...(rules ? { rules: rules.length ? rules.join("\n") : null } : {}),
+          ...(active !== undefined ? { active } : {}),
           photos,
         },
       });
@@ -412,37 +440,41 @@ export async function updateFacilityFromForm(
       await syncFacilityCourts(tx, id, effectiveCourts);
     });
 
-    // After update, load the fresh facility snapshot
-    const updated = await prisma.facility.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        openTime: true,
-        closeTime: true,
-        active: true,
-      },
-    });
+    // 4. Reload the updated facility so we have the "after" state
+    const updated = await prisma.facility.findUnique({ where: { id } });
+    if (!updated) {
+      revalidatePath("/admin");
+      return { ok: true };
+    }
 
-    if (updated) {
-      const hoursChanged =
-        updated.openTime !== existing.openTime ||
-        updated.closeTime !== existing.closeTime;
+    // 5. Work out what changed and enqueue logs
+    const kinds: FacilityChangeKind[] = [];
 
-      if (hoursChanged) {
-        await notifyFacilityChange({
-          kind: "hours_changed",
-          facility: updated,
-          before: {
-            id,
-            name: existing.name,
-            openTime: existing.openTime,
-            closeTime: existing.closeTime,
-            active: existing.active,
-          },
-          after: updated,
-        });
-      }
+    // active changed
+    if (updated.active !== existing.active) {
+      kinds.push(updated.active ? "reopened" : "closed");
+    }
+
+    // hours changed
+    const hoursChanged =
+      updated.openTime !== existing.openTime ||
+      updated.closeTime !== existing.closeTime;
+
+    if (hoursChanged) {
+      kinds.push("hours_changed");
+    }
+
+    for (const kind of kinds) {
+      await notifyFacilityChange({
+        kind,
+        facility: {
+          id: updated.id,
+          name: updated.name,
+          openTime: updated.openTime,
+          closeTime: updated.closeTime,
+          active: updated.active,
+        },
+      });
     }
 
     revalidatePath("/admin");
