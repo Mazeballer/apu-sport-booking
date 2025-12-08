@@ -15,9 +15,12 @@ export async function generateWeatherMessage({
   rainProbability,
   rainDescription,
 }: WeatherMessageArgs) {
+  // fixed time to always follow Malaysia timezone
   const timeStr = bookingStart.toLocaleTimeString("en-MY", {
     hour: "2-digit",
     minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kuala_Lumpur",
   });
 
   const risk = Math.round(rainProbability * 100);

@@ -14,14 +14,6 @@ export async function GET(req: NextRequest) {
     const secret = process.env.CRON_SECRET?.trim();
     const header = req.headers.get("x-cron-secret")?.trim();
 
-    console.log("[weather-cron] auth debug", {
-      hasSecret: !!secret,
-      hasHeader: !!header,
-      secretLen: secret?.length,
-      headerLen: header?.length,
-      headerPreview: header?.slice(0, 8),
-    });
-
     if (!secret || !header || header !== secret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -47,18 +39,10 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  console.log("[weather-cron] bookings found", bookings.length);
-
   let notified = 0;
 
   for (const booking of bookings) {
     const rain = await getRainRiskForBooking(booking.start);
-
-    console.log("[weather-cron] rain result", {
-      bookingId: booking.id,
-      rain,
-    });
-
     if (!rain) continue;
     if (rain.probability < RAIN_THRESHOLD) continue;
 
@@ -82,11 +66,6 @@ export async function GET(req: NextRequest) {
 
     notified += 1;
   }
-
-  console.log("[weather-cron] finished", {
-    checked: bookings.length,
-    notified,
-  });
 
   return NextResponse.json({
     ok: true,
