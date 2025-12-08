@@ -4,8 +4,8 @@ import { getRainRiskForBooking } from "@/lib/weather";
 import { generateWeatherMessage } from "@/lib/ai/aiWeatherMessage";
 import { sendPushToUser } from "@/lib/push";
 
-const RAIN_THRESHOLD = 0.1; // 60 percent
-const WINDOW_HOURS = 24; // look ahead 3 hours
+const RAIN_THRESHOLD = 0.1;
+const WINDOW_HOURS = 24;
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const bookings = await prisma.booking.findMany({
     where: {
-      status: "confirmed",
+      status: { in: ["confirmed", "rescheduled"] },
       start: {
         gte: now,
         lte: limit,
