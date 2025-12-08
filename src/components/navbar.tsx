@@ -72,7 +72,9 @@ export function Navbar() {
       asChild
       variant={isActive ? "default" : "ghost"}
       size={mobile ? "default" : "sm"}
-      className={mobile ? "w-full justify-start" : ""}
+      className={`${
+        mobile ? "w-full justify-start" : ""
+      } transition-all duration-200 hover:scale-105 active:scale-95`}
     >
       <Link href={href} onClick={onClick}>
         <Icon className="h-4 w-4 mr-2" />
@@ -128,7 +130,10 @@ export function Navbar() {
   return (
     <nav className="w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl">
+        <Link
+          href="/"
+          className="flex items-center gap-2 font-bold text-xl transition-all duration-200 hover:scale-105 active:scale-95"
+        >
           {mounted ? (
             <Image
               src={
@@ -156,7 +161,7 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full"
+                className="rounded-full transition-all duration-200 hover:scale-110 active:scale-95"
                 aria-label="Account menu"
               >
                 <UserIcon className="h-5 w-5" />
@@ -174,7 +179,7 @@ export function Navbar() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={logout}
-                className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 focus:text-red-600 dark:focus:text-red-300"
+                className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 focus:text-red-600 dark:focus:text-red-300 transition-all duration-200 cursor-pointer"
               >
                 <LogOutIcon className="mr-2 h-4 w-4" />
                 <span>Log out</span>
@@ -188,7 +193,12 @@ export function Navbar() {
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Open menu">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open menu"
+                className="transition-all duration-200 hover:scale-110 active:scale-95"
+              >
                 <MenuIcon className="h-5 w-5" />
               </Button>
             </SheetTrigger>
@@ -211,7 +221,7 @@ export function Navbar() {
                   </div>
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 border-red-500 dark:border-red-400 bg-transparent"
+                    className="w-full justify-start text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 border-red-500 dark:border-red-400 bg-transparent transition-all duration-200 hover:scale-105 active:scale-95"
                     onClick={() => {
                       setOpen(false);
                       logout();

@@ -46,8 +46,8 @@ interface BookingFlowProps {
     description?: string | null;
     capacity?: number | null;
     photos?: string[];
-    openTime?: string | null; // "07:00"
-    closeTime?: string | null; // "22:00"
+    openTime?: string | null;
+    closeTime?: string | null;
     rules?: string[] | string | null;
     courts: { id: string; name: string }[];
   };
@@ -85,6 +85,7 @@ export function BookingFlow({
   const [showLayoutDialog, setShowLayoutDialog] = useState(false);
   const [showAvailabilityDialog, setShowAvailabilityDialog] = useState(false);
   const [layoutImage, setLayoutImage] = useState("");
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const facilityEquipment = equipment;
 
@@ -97,7 +98,6 @@ export function BookingFlow({
   };
   const currentStep = getCurrentStep();
 
-  // Base hourly slots from open time to one hour before close time
   const baseTimeSlots = useMemo(() => {
     const slots: string[] = [];
     const startH = Number((facility.openTime ?? "07:00").split(":")[0]);
@@ -108,10 +108,6 @@ export function BookingFlow({
     return slots;
   }, [facility.openTime, facility.closeTime]);
 
-  // When duration is 2 hours, do not offer the last hour before closing
-  // Example: open 07:00, close 22:00
-  // duration 1 hour  last slot 21:00
-  // duration 2 hours last slot 20:00
   const selectableTimeSlots = useMemo(() => {
     if (!selectedDuration) return baseTimeSlots;
 
@@ -124,7 +120,6 @@ export function BookingFlow({
     });
   }, [baseTimeSlots, selectedDuration, facility.closeTime]);
 
-  // Utilities for overlap
   const buildDateAtTime = (date: Date, hhmm: string) => {
     const [hh, mm] = hhmm.split(":").map(Number);
     const d = new Date(date);
@@ -141,7 +136,6 @@ export function BookingFlow({
   const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
     aStart < bEnd && aEnd > bStart;
 
-  // Bookings filtered to the selected day
   const dayBookings = useMemo(() => {
     if (!selectedDate) return [];
     const y = selectedDate.getFullYear();
@@ -154,7 +148,6 @@ export function BookingFlow({
     });
   }, [existingBookings, selectedDate]);
 
-  // Step 3: a time slot is shown as booked if all courts are occupied for the chosen duration
   const isSlotFullyBooked = (slot: string) => {
     if (!selectedDate || !selectedDuration) return false;
     const slotStart = buildDateAtTime(selectedDate, slot);
@@ -171,7 +164,6 @@ export function BookingFlow({
     return !freeCourtExists;
   };
 
-  // Step 4: for the selected time, compute each court status
   const courtStatusForSelectedTime = useMemo(() => {
     if (!selectedDate || !selectedDuration || !selectedTime) return {};
     const slotStart = buildDateAtTime(selectedDate, selectedTime);
@@ -201,7 +193,6 @@ export function BookingFlow({
     selectedTime,
   ]);
 
-  // Availability dialog table needs per court per slot
   const generateAvailabilityData = () => {
     if (!selectedDate) return [];
 
@@ -244,25 +235,30 @@ export function BookingFlow({
     if (!selectedDate || !selectedDuration || !selectedTime || !selectedCourt)
       return;
 
-    const start = buildDateAtTime(selectedDate, selectedTime);
-    const end = addHours(start, selectedDuration);
+    setIsConfirming(true);
+    try {
+      const start = buildDateAtTime(selectedDate, selectedTime);
+      const end = addHours(start, selectedDuration);
 
-    await onCreateBooking({
-      facilityId: facility.id,
-      courtId: selectedCourt,
-      startISO: start.toISOString(),
-      endISO: end.toISOString(),
-      equipmentIds: selectedEquipment,
-      notes: equipmentNotes || undefined,
-    });
+      await onCreateBooking({
+        facilityId: facility.id,
+        courtId: selectedCourt,
+        startISO: start.toISOString(),
+        endISO: end.toISOString(),
+        equipmentIds: selectedEquipment,
+        notes: equipmentNotes || undefined,
+      });
 
-    notify.success(
-      `Booking confirmed for ${
-        facility.name
-      } on ${selectedDate?.toLocaleDateString()} at ${selectedTime}`
-    );
+      notify.success(
+        `Booking confirmed for ${
+          facility.name
+        } on ${selectedDate?.toLocaleDateString()} at ${selectedTime}`
+      );
 
-    router.push("/");
+      router.push("/");
+    } finally {
+      setIsConfirming(false);
+    }
   };
 
   const handleViewLayout = () => {
@@ -289,7 +285,11 @@ export function BookingFlow({
 
   return (
     <>
-      <Button variant="ghost" onClick={() => router.back()} className="mb-6">
+      <Button
+        variant="ghost"
+        onClick={() => router.back()}
+        className="mb-6 transition-all duration-200 hover:scale-105 active:scale-95"
+      >
         <ArrowLeftIcon className="h-4 w-4 mr-2" />
         Back to Facility
       </Button>
@@ -381,7 +381,7 @@ export function BookingFlow({
                     variant="link"
                     size="sm"
                     onClick={() => setShowAvailabilityDialog(true)}
-                    className="text-primary"
+                    className="text-primary transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     View Live Availability
                   </Button>
@@ -403,6 +403,7 @@ export function BookingFlow({
                     variant="outline"
                     size="sm"
                     onClick={() => setSelectedDate(undefined)}
+                    className="transition-all duration-200 hover:scale-105 active:scale-95"
                   >
                     Change
                   </Button>
@@ -454,7 +455,7 @@ export function BookingFlow({
                     variant={selectedDuration === h ? "default" : "outline"}
                     onClick={() => setSelectedDuration(h as 1 | 2)}
                     disabled={currentStep < 2}
-                    className="h-20"
+                    className="h-20 transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100"
                   >
                     <div className="text-center">
                       <div className="text-2xl font-bold">{h}</div>
@@ -503,7 +504,7 @@ export function BookingFlow({
                       variant={selectedTime === time ? "default" : "outline"}
                       onClick={() => !booked && setSelectedTime(time)}
                       disabled={booked || currentStep < 3}
-                      className="h-16"
+                      className="h-16 transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100"
                     >
                       <div className="text-center">
                         <div className="font-semibold">{time}</div>
@@ -557,7 +558,7 @@ export function BookingFlow({
                   size="sm"
                   onClick={handleViewLayout}
                   disabled={currentStep < 4}
-                  className="text-primary"
+                  className="text-primary transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100"
                 >
                   View Layout
                 </Button>
@@ -572,13 +573,13 @@ export function BookingFlow({
                   return (
                     <div
                       key={court.id}
-                      className={`border rounded-xl p-4 cursor-pointer transition-all ${
+                      className={`border rounded-xl p-4 cursor-pointer transition-all duration-200 ${
                         selectedCourt === court.id
-                          ? "border-primary bg-primary/5"
+                          ? "border-primary bg-primary/5 scale-[1.02]"
                           : isAvailable && currentStep >= 4
-                          ? "border-border hover:border-primary/50"
+                          ? "border-border hover:border-primary/50 hover:scale-[1.02]"
                           : "border-border opacity-50 cursor-not-allowed"
-                      }`}
+                      } active:scale-95`}
                       onClick={() =>
                         isAvailable &&
                         currentStep >= 4 &&
@@ -633,7 +634,7 @@ export function BookingFlow({
                 {facilityEquipment.map((eq) => (
                   <div
                     key={eq.id}
-                    className="flex items-center justify-between p-4 border rounded-xl hover:border-primary/50 transition-colors"
+                    className="flex items-center justify-between p-4 border rounded-xl hover:border-primary/50 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
                   >
                     <div className="flex items-center gap-3">
                       <Checkbox
@@ -673,7 +674,7 @@ export function BookingFlow({
                   value={equipmentNotes}
                   onChange={(e) => setEquipmentNotes(e.target.value)}
                   disabled={currentStep < 5}
-                  className="min-h-24 resize-none"
+                  className="min-h-24 resize-none transition-all duration-200 focus:scale-[1.01]"
                 />
               </div>
 
@@ -730,11 +731,12 @@ export function BookingFlow({
 
                   <Button
                     onClick={handleConfirmBooking}
-                    className="w-full"
+                    disabled={isConfirming}
+                    className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
                     size="lg"
                   >
                     <CheckIcon className="h-4 w-4 mr-2" />
-                    Confirm Booking
+                    {isConfirming ? "Confirming..." : "Confirm Booking"}
                   </Button>
                 </>
               )}
@@ -776,7 +778,7 @@ export function BookingFlow({
                   setShowAvailabilityDialog(false);
                   setSelectedDate(undefined);
                 }}
-                className="flex items-center gap-2 mt-2 hover:text-primary transition-colors"
+                className="flex items-center gap-2 mt-2 hover:text-primary transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <CalendarIcon className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
                 <p className="text-sm md:text-base text-muted-foreground hover:text-primary">
@@ -836,12 +838,12 @@ export function BookingFlow({
                         return (
                           <div
                             key={slot}
-                            className={`w-16 md:w-24 h-10 md:h-14 flex-shrink-0 border-r last:border-r-0 transition-colors ${
+                            className={`w-16 md:w-24 h-10 md:h-14 flex-shrink-0 border-r last:border-r-0 transition-all duration-200 ${
                               status === "unavailable"
                                 ? "bg-primary"
                                 : status === "elapsed"
                                 ? "bg-muted"
-                                : "bg-background hover:bg-accent/50 cursor-pointer"
+                                : "bg-background hover:bg-accent/50 cursor-pointer hover:scale-105"
                             }`}
                           />
                         );
@@ -854,7 +856,7 @@ export function BookingFlow({
 
             <Button
               onClick={() => setShowAvailabilityDialog(false)}
-              className="w-full"
+              className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               size="lg"
             >
               Select this date
