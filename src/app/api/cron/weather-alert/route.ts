@@ -11,8 +11,17 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   if (process.env.NODE_ENV === "production") {
-    const secret = process.env.CRON_SECRET;
-    const header = req.headers.get("x-cron-secret");
+    const secret = process.env.CRON_SECRET?.trim();
+    const header = req.headers.get("x-cron-secret")?.trim();
+
+    console.log("[weather-cron] auth debug", {
+      hasSecret: !!secret,
+      hasHeader: !!header,
+      secretLen: secret?.length,
+      headerLen: header?.length,
+      headerPreview: header?.slice(0, 8),
+    });
+
     if (!secret || header !== secret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
