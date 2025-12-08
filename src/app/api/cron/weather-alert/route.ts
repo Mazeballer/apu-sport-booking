@@ -4,8 +4,8 @@ import { getRainRiskForBooking } from "@/lib/weather";
 import { generateWeatherMessage } from "@/lib/ai/aiWeatherMessage";
 import { sendPushToUser } from "@/lib/push";
 
-const RAIN_THRESHOLD = 0.6; // 60 percent
-const WINDOW_HOURS = 4; // look ahead 3 hours
+const RAIN_THRESHOLD = 10; // 60 percent
+const WINDOW_HOURS = 1; // look ahead 3 hours
 
 export const dynamic = "force-dynamic";
 
