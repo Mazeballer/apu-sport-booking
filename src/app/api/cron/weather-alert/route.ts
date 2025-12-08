@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       headerPreview: header?.slice(0, 8),
     });
 
-    if (!secret || header !== secret) {
+    if (!secret || !header || header !== secret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
@@ -47,34 +47,46 @@ export async function GET(req: NextRequest) {
     },
   });
 
+  console.log("[weather-cron] bookings found", bookings.length);
+
   let notified = 0;
 
   for (const booking of bookings) {
     const rain = await getRainRiskForBooking(booking.start);
+
+    console.log("[weather-cron] rain result", {
+      bookingId: booking.id,
+      rain,
+    });
+
     if (!rain) continue;
+    if (rain.probability < RAIN_THRESHOLD) continue;
 
-    if (rain.probability >= RAIN_THRESHOLD) {
-      const msg = await generateWeatherMessage({
-        facilityName: booking.facility.name,
-        bookingStart: booking.start,
-        rainProbability: rain.probability,
-        rainDescription: rain.description,
-      });
+    const msg = await generateWeatherMessage({
+      facilityName: booking.facility.name,
+      bookingStart: booking.start,
+      rainProbability: rain.probability,
+      rainDescription: rain.description,
+    });
 
-      await sendPushToUser(booking.userId, {
-        title: msg.title,
-        body: msg.body,
-        url: `/bookings/${booking.id}`,
-      });
+    await sendPushToUser(booking.userId, {
+      title: msg.title,
+      body: msg.body,
+      url: `/bookings/${booking.id}`,
+    });
 
-      await prisma.booking.update({
-        where: { id: booking.id },
-        data: { weatherAlertSentAt: now },
-      });
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { weatherAlertSentAt: now },
+    });
 
-      notified += 1;
-    }
+    notified += 1;
   }
+
+  console.log("[weather-cron] finished", {
+    checked: bookings.length,
+    notified,
+  });
 
   return NextResponse.json({
     ok: true,
