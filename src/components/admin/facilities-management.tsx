@@ -34,7 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusIcon, EditIcon, TrashIcon } from "lucide-react";
+import { PlusIcon, EditIcon, TrashIcon, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -243,6 +243,7 @@ export function FacilitiesManagement({
 
   const handleEdit = async () => {
     if (!editingFacility) return;
+    setSaving(true);
 
     const validation = validateForm();
     if (!validation.isValid) {
@@ -250,6 +251,7 @@ export function FacilitiesManagement({
         "Please fill in all required fields: " +
           validation.missingFields.join(", ")
       );
+      setSaving(false);
       return;
     }
 
@@ -320,6 +322,8 @@ export function FacilitiesManagement({
     } catch (error) {
       console.error(error);
       notify.error("Failed to update facility. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -422,7 +426,7 @@ export function FacilitiesManagement({
       <div className="flex justify-end">
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="transition-all duration-200 hover:scale-105 active:scale-95">
               <PlusIcon className="h-4 w-4 mr-2" />
               Add Facility
             </Button>
@@ -440,6 +444,7 @@ export function FacilitiesManagement({
               layoutImageFile={layoutImageFile}
               setLayoutImageFile={setLayoutImageFile}
               sportOptions={sportOptions}
+              saving={saving}
             />
           </DialogContent>
         </Dialog>
@@ -463,6 +468,7 @@ export function FacilitiesManagement({
                       onCheckedChange={(checked) =>
                         handleStatusToggle(facility, checked)
                       }
+                      className="transition-all duration-200"
                     />
                   </div>
                 </div>
@@ -628,6 +634,7 @@ export function FacilitiesManagement({
                       onCheckedChange={(checked) =>
                         handleStatusToggle(facility, checked)
                       }
+                      className="transition-all duration-200"
                     />
                     <span className="text-sm capitalize mx-0.5">
                       {facility.status || "active"}
@@ -683,6 +690,7 @@ export function FacilitiesManagement({
               layoutImageFile={layoutImageFile}
               setLayoutImageFile={setLayoutImageFile}
               sportOptions={sportOptions}
+              saving={saving}
             />
           </DialogContent>
         </Dialog>
@@ -727,6 +735,7 @@ function FacilityForm({
   layoutImageFile,
   setLayoutImageFile,
   sportOptions,
+  saving = false,
 }: {
   formData: any;
   setFormData: any;
@@ -737,6 +746,7 @@ function FacilityForm({
   layoutImageFile: File | null;
   setLayoutImageFile: (file: File | null) => void;
   sportOptions: string[];
+  saving?: boolean;
 }) {
   const [isCustomSport, setIsCustomSport] = useState(false);
   const [customSportType, setCustomSportType] = useState("");
@@ -1275,12 +1285,20 @@ function FacilityForm({
           });
           onSubmit();
         }}
-        className="w-full"
+        className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
         disabled={
-          formData.isMultiSport && formData.supportedSports?.length === 0
+          saving ||
+          (formData.isMultiSport && formData.supportedSports?.length === 0)
         }
       >
-        {isEdit ? "Update Facility" : "Add Facility"}
+        {saving ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {isEdit ? "Updating..." : "Adding Facility..."}
+          </>
+        ) : (
+          <>{isEdit ? "Update Facility" : "Add Facility"}</>
+        )}
       </Button>
     </div>
   );

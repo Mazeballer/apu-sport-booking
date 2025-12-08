@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, ClockIcon, MapPinIcon } from "lucide-react";
+import { CalendarIcon, ClockIcon, MapPinIcon, SearchIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
@@ -20,6 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type EquipmentItem = {
@@ -46,6 +47,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
   const [filterMode, setFilterMode] = useState<"all" | "today" | "custom">(
     "all"
   );
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Decorate bookings with date, startTime, duration for display and filtering
   const confirmedBookings = bookings
@@ -68,28 +70,35 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const filteredBookings = confirmedBookings.filter((booking) => {
-    if (filterMode === "all") return true;
-
+    // Date filter
+    let dateMatch = true;
     if (filterMode === "today") {
       const today = new Date();
       const bookingDate = new Date(booking.date);
-      return (
+      dateMatch =
         bookingDate.getDate() === today.getDate() &&
         bookingDate.getMonth() === today.getMonth() &&
-        bookingDate.getFullYear() === today.getFullYear()
-      );
-    }
-
-    if (filterMode === "custom" && selectedDate) {
+        bookingDate.getFullYear() === today.getFullYear();
+    } else if (filterMode === "custom" && selectedDate) {
       const bookingDate = new Date(booking.date);
-      return (
+      dateMatch =
         bookingDate.getDate() === selectedDate.getDate() &&
         bookingDate.getMonth() === selectedDate.getMonth() &&
-        bookingDate.getFullYear() === selectedDate.getFullYear()
-      );
+        bookingDate.getFullYear() === selectedDate.getFullYear();
     }
 
-    return true;
+    // Search filter
+    let searchMatch = true;
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      searchMatch =
+        booking.facilityName.toLowerCase().includes(query) ||
+        booking.facilityLocation.toLowerCase().includes(query) ||
+        booking.userEmail.toLowerCase().includes(query) ||
+        booking.equipment.some((eq) => eq.name.toLowerCase().includes(query));
+    }
+
+    return dateMatch && searchMatch;
   });
 
   const handleTodayFilter = () => {
@@ -125,11 +134,24 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
 
   return (
     <div className="space-y-4">
+      {/* Search Bar */}
+      <div className="relative">
+        <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by facility, location, student email, or equipment..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10 transition-all duration-200 focus:scale-[1.01]"
+        />
+      </div>
+
+      {/* Filter Buttons */}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant={filterMode === "all" ? "default" : "outline"}
           size="sm"
           onClick={handleAllFilter}
+          className="transition-all duration-200 hover:scale-105 active:scale-95"
         >
           All Bookings
         </Button>
@@ -137,6 +159,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
           variant={filterMode === "today" ? "default" : "outline"}
           size="sm"
           onClick={handleTodayFilter}
+          className="transition-all duration-200 hover:scale-105 active:scale-95"
         >
           Today
         </Button>
@@ -145,7 +168,9 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
             <Button
               variant={filterMode === "custom" ? "default" : "outline"}
               size="sm"
-              className={cn("justify-start text-left font-normal")}
+              className={cn(
+                "justify-start text-left font-normal transition-all duration-200 hover:scale-105 active:scale-95"
+              )}
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
               {selectedDate ? selectedDate.toLocaleDateString() : "Pick a date"}
@@ -160,7 +185,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
             />
           </PopoverContent>
         </Popover>
-        {filterMode !== "all" && (
+        {(filterMode !== "all" || searchQuery.trim()) && (
           <Badge variant="secondary" className="ml-2">
             {filteredBookings.length} booking
             {filteredBookings.length !== 1 ? "s" : ""}
@@ -171,14 +196,26 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
       {filteredBookings.length === 0 ? (
         <div className="text-center py-12">
           <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-            <CalendarIcon className="w-8 h-8 text-muted-foreground" />
+            <SearchIcon className="w-8 h-8 text-muted-foreground" />
           </div>
           <h3 className="text-lg font-semibold mb-2">No bookings found</h3>
           <p className="text-muted-foreground">
-            {filterMode === "today"
+            {searchQuery.trim()
+              ? `No results match "${searchQuery}"`
+              : filterMode === "today"
               ? "There are no bookings scheduled for today"
               : "There are no bookings for the selected date"}
           </p>
+          {searchQuery.trim() && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSearchQuery("")}
+              className="mt-4 transition-all duration-200 hover:scale-105 active:scale-95"
+            >
+              Clear search
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -197,7 +234,10 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
               </TableHeader>
               <TableBody>
                 {filteredBookings.map((booking) => (
-                  <TableRow key={booking.id}>
+                  <TableRow
+                    key={booking.id}
+                    className="transition-colors duration-200"
+                  >
                     <TableCell>
                       <div>
                         <p className="font-medium">{booking.facilityName}</p>
@@ -249,7 +289,10 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
           {/* Mobile Card View */}
           <div className="md:hidden space-y-4">
             {filteredBookings.map((booking) => (
-              <Card key={booking.id} className="p-4">
+              <Card
+                key={booking.id}
+                className="p-4 transition-all duration-200 hover:shadow-lg"
+              >
                 <div className="space-y-4">
                   <div>
                     <h3 className="font-bold text-lg mb-1">

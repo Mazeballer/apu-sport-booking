@@ -54,6 +54,7 @@ export function RescheduleDialog({
 }: RescheduleDialogProps) {
   const [newDate, setNewDate] = useState<Date | undefined>(undefined);
   const [newTime, setNewTime] = useState<string>("");
+  const [isConfirming, setIsConfirming] = useState(false);
 
   useEffect(() => {
     if (!booking || !open) return;
@@ -153,6 +154,7 @@ export function RescheduleDialog({
     const start = new Date(newDate);
     start.setHours(hh, mm, 0, 0);
 
+    setIsConfirming(true);
     try {
       await onConfirm(start.toISOString());
 
@@ -166,6 +168,8 @@ export function RescheduleDialog({
     } catch (err) {
       console.error(err);
       notify.error("Unable to reschedule. Please try a different time.");
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -202,7 +206,7 @@ export function RescheduleDialog({
               Select new time
             </label>
             <Select value={newTime} onValueChange={setNewTime}>
-              <SelectTrigger className="border-3 border-primary/20 focus:border-primary shadow-sm">
+              <SelectTrigger className="border-3 border-primary/20 focus:border-primary shadow-sm transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]">
                 <SelectValue placeholder="Choose time slot" />
               </SelectTrigger>
               <SelectContent>
@@ -212,7 +216,11 @@ export function RescheduleDialog({
                   </div>
                 ) : (
                   availableSlots.map((slot) => (
-                    <SelectItem key={slot} value={slot}>
+                    <SelectItem
+                      key={slot}
+                      value={slot}
+                      className="transition-all duration-200 cursor-pointer"
+                    >
                       {slot}
                     </SelectItem>
                   ))
@@ -245,10 +253,10 @@ export function RescheduleDialog({
 
           <Button
             onClick={handleReschedule}
-            className="w-full"
-            disabled={!newDate || !newTime}
+            className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
+            disabled={!newDate || !newTime || isConfirming}
           >
-            Confirm reschedule
+            {isConfirming ? "Confirming..." : "Confirm reschedule"}
           </Button>
         </div>
       </DialogContent>

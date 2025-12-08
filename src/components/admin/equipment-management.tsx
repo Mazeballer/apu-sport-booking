@@ -27,7 +27,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusIcon, EditIcon, PackageIcon, TrashIcon } from "lucide-react";
+import {
+  PlusIcon,
+  EditIcon,
+  PackageIcon,
+  TrashIcon,
+  Loader2,
+} from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import {
@@ -88,6 +94,9 @@ export function EquipmentManagement({
   );
   const [deletingEquipment, setDeletingEquipment] =
     useState<EquipmentRow | null>(null);
+
+  const [saving, setSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     id: "" as string | undefined,
@@ -152,6 +161,8 @@ export function EquipmentManagement({
   };
 
   const submitUpsert = () => {
+    if (saving) return;
+
     const errors = validateForm();
     setValidationErrors(errors);
     if (Object.keys(errors).length) {
@@ -159,6 +170,7 @@ export function EquipmentManagement({
       return;
     }
 
+    setSaving(true);
     const fd = new FormData();
     if (formData.id) fd.set("id", formData.id);
     fd.set("name", formData.name);
@@ -173,8 +185,9 @@ export function EquipmentManagement({
   };
 
   const handleDelete = () => {
-    if (!deletingEquipment) return;
+    if (!deletingEquipment || isDeleting) return;
 
+    setIsDeleting(true);
     const fd = new FormData();
     fd.set("id", deletingEquipment.id);
 
@@ -197,6 +210,7 @@ export function EquipmentManagement({
     } else {
       notify.error(upsertState.message ?? "Could not save");
     }
+    setSaving(false);
     setLastAction(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upsertState]);
@@ -211,6 +225,7 @@ export function EquipmentManagement({
       notify.error(deleteState.message ?? "Delete failed");
     }
     setDeletingEquipment(null);
+    setIsDeleting(false);
     setLastAction(null);
   }, [deleteState, lastAction]);
 
@@ -229,7 +244,10 @@ export function EquipmentManagement({
           }}
         >
           <DialogTrigger asChild>
-            <Button onClick={() => setIsAddOpen(true)}>
+            <Button
+              onClick={() => setIsAddOpen(true)}
+              className="transition-all duration-200 hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
+            >
               <PlusIcon className="h-4 w-4 mr-2" />
               Add Equipment
             </Button>
@@ -247,6 +265,7 @@ export function EquipmentManagement({
               validationErrors={validationErrors}
               facilities={facilities}
               isEdit={!!editingEquipment}
+              saving={saving}
             />
           </DialogContent>
         </Dialog>
@@ -258,7 +277,10 @@ export function EquipmentManagement({
             const facility = facilities.find((f) => f.id === eq.facilityId);
             const stockPercent = (eq.qtyAvailable / eq.qtyTotal) * 100;
             return (
-              <Card key={eq.id} className="overflow-hidden">
+              <Card
+                key={eq.id}
+                className="overflow-hidden transition-shadow hover:shadow-md"
+              >
                 <CardContent className="p-4 space-y-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 flex-1">
@@ -333,7 +355,7 @@ export function EquipmentManagement({
                       variant="outline"
                       size="sm"
                       onClick={() => openEdit(eq)}
-                      className="flex-1"
+                      className="flex-1 transition-all duration-150 active:scale-95"
                     >
                       <EditIcon className="h-4 w-4 mr-1" />
                       Edit
@@ -342,7 +364,7 @@ export function EquipmentManagement({
                       variant="outline"
                       size="sm"
                       onClick={() => setDeletingEquipment(eq)}
-                      className="flex-1 text-destructive hover:text-destructive"
+                      className="flex-1 text-destructive hover:text-destructive transition-all duration-150 active:scale-95"
                     >
                       <TrashIcon className="h-4 w-4 mr-1" />
                       Delete
@@ -371,7 +393,10 @@ export function EquipmentManagement({
               const stockPercent = (eq.qtyAvailable / eq.qtyTotal) * 100;
 
               return (
-                <TableRow key={eq.id}>
+                <TableRow
+                  key={eq.id}
+                  className="hover:bg-muted/50 transition-colors"
+                >
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <PackageIcon className="h-4 w-4 text-primary" />
@@ -416,6 +441,7 @@ export function EquipmentManagement({
                         variant="outline"
                         size="sm"
                         onClick={() => openEdit(eq)}
+                        className="transition-all duration-150 active:scale-95 hover:bg-accent"
                       >
                         <EditIcon className="h-4 w-4 mr-1" />
                         Edit
@@ -424,7 +450,7 @@ export function EquipmentManagement({
                         variant="outline"
                         size="sm"
                         onClick={() => setDeletingEquipment(eq)}
-                        className="text-destructive hover:text-destructive"
+                        className="text-destructive hover:text-destructive transition-all duration-150 active:scale-95 hover:bg-destructive/10"
                       >
                         <TrashIcon className="h-4 w-4 mr-1" />
                         Delete
@@ -459,6 +485,7 @@ export function EquipmentManagement({
             isEdit
             validationErrors={validationErrors}
             facilities={facilities}
+            saving={saving}
           />
         </DialogContent>
       </Dialog>
@@ -477,12 +504,20 @@ export function EquipmentManagement({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-150 active:scale-95"
             >
-              Delete Equipment
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Equipment"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -510,6 +545,7 @@ function EquipmentForm({
   isEdit = false,
   validationErrors = {},
   facilities,
+  saving = false,
 }: {
   formData: any;
   setFormData: any;
@@ -517,6 +553,7 @@ function EquipmentForm({
   isEdit?: boolean;
   validationErrors?: Record<string, string>;
   facilities: Facility[];
+  saving?: boolean;
 }) {
   return (
     <div className="space-y-6 py-4">
@@ -632,8 +669,19 @@ function EquipmentForm({
         </div>
       </div>
 
-      <Button onClick={onSubmit} className="w-full">
-        {isEdit ? "Update Equipment" : "Add Equipment"}
+      <Button
+        onClick={onSubmit}
+        className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
+        disabled={saving}
+      >
+        {saving ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {isEdit ? "Updating..." : "Adding Equipment..."}
+          </>
+        ) : (
+          <>{isEdit ? "Update Equipment" : "Add Equipment"}</>
+        )}
       </Button>
     </div>
   );

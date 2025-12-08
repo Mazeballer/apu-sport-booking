@@ -322,7 +322,7 @@ export default async function StaffPage() {
               <CardHeader>
                 <CardTitle>Facility Bookings Calendar</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  View all facility bookings (read only)
+                  View all facility bookings
                 </p>
               </CardHeader>
               <CardContent>
