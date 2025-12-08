@@ -73,3 +73,7 @@ export async function GET(req: NextRequest) {
     notified,
   });
 }
+
+export async function POST(req: NextRequest) {
+  return GET(req);
+}
