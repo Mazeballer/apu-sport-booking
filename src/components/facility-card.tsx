@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MapPinIcon, UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { useState } from "react";
 import type { FacilityCardData } from "@/lib/facility-types";
 
 interface FacilityCardProps {
@@ -14,17 +15,28 @@ interface FacilityCardProps {
 
 export function FacilityCard({ facility }: FacilityCardProps) {
   const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
 
-  const cover = facility.photos?.[0] ?? "/images/placeholders/facility.jpg"; // ensure this file exists
+  const cover = facility.photos?.[0] ?? "/images/placeholders/facility.jpg";
+
+  const handleViewClick = () => {
+    setIsNavigating(true);
+    router.push(`/facility/${facility.id}`);
+    // Reset after navigation starts (optional, helps with back button)
+    setTimeout(() => setIsNavigating(false), 1000);
+  };
 
   return (
-    <Card className="overflow-hidden hover:shadow-xl transition-shadow duration-300 rounded-2xl flex flex-col h-full">
-      <div className="relative h-48 w-full overflow-hidden">
+    <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 rounded-2xl flex flex-col h-full group cursor-pointer">
+      <div
+        className="relative h-48 w-full overflow-hidden"
+        onClick={handleViewClick}
+      >
         <Image
           src={cover}
           alt={facility.name}
           fill
-          className="object-cover"
+          className="object-cover transition-transform duration-300 group-hover:scale-105"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           priority={false}
         />
@@ -64,10 +76,11 @@ export function FacilityCard({ facility }: FacilityCardProps) {
 
       <CardFooter className="p-5 pt-0">
         <Button
-          className="w-full"
-          onClick={() => router.push(`/facility/${facility.id}`)} // change to your actual route
+          className="w-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+          onClick={handleViewClick}
+          disabled={isNavigating}
         >
-          View & Book 
+          {isNavigating ? "Loading..." : "View & Book"}
         </Button>
       </CardFooter>
     </Card>
