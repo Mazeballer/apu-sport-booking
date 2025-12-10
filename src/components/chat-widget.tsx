@@ -182,7 +182,7 @@ export function ChatWidget() {
         <Button
           onClick={() => setIsOpen(true)}
           size="icon"
-          className="fixed bottom-8 right-8 h-16 w-16 rounded-full shadow-xl bg-blue-600 hover:bg-blue-700 text-white border-0 transition-all duration-300 hover:scale-110 flex items-center justify-center"
+          className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 h-16 w-16 rounded-full shadow-xl bg-blue-600 hover:bg-blue-700 text-white border-0 transition-all duration-300 hover:scale-110 flex items-center justify-center z-50"
         >
           <Sparkles className="h-10 w-10 text-yellow-300 animate-pulse" />
         </Button>
@@ -191,7 +191,13 @@ export function ChatWidget() {
       {/* Chat window */}
       {isOpen && (
         <Card
-          className="fixed bottom-8 right-8 w-[400px] h-[600px] flex flex-col min-h-0 shadow-2xl bg-white dark:bg-[#0f1419] border-gray-200 dark:border-gray-800"
+          className="fixed bottom-2 left-2 right-2 sm:left-auto sm:right-8 sm:bottom-8
+                     w-auto sm:w-[400px] max-w-full
+                     h-[70vh] sm:h-[600px]
+                     flex flex-col min-h-0 shadow-2xl
+                     bg-white dark:bg-[#0f1419]
+                     border-gray-200 dark:border-gray-800
+                     z-50"
           onMouseEnter={() => setHoveringChat(true)}
           onMouseLeave={() => setHoveringChat(false)}
         >
