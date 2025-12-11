@@ -41,70 +41,21 @@ function getMalaysiaToday(): string {
 }
 
 /* --------------------------------
-   Fuzzy facility matcher
+   Fuzzy helpers
 -------------------------------- */
 
-function findFacilityIdFromQuestion(
-  question: string,
-  facilities: { id: string; name: string; type: string }[]
-) {
-  const q = normalizeText(question);
-
-  if (!q || facilities.length === 0) {
-    return null;
-  }
-
-  // Simple include match first
-  for (const f of facilities) {
-    const fullName = normalizeText(f.name);
-    const typeName = normalizeText(f.type);
-
-    if (!fullName && !typeName) continue;
-
-    if (q.includes(fullName) || q.includes(typeName)) {
-      return f.id;
-    }
-  }
-
-  // Token based fuzzy match
-  const qTokens = q.split(/\s+/).filter(Boolean);
-
-  let bestFacility: { id: string; score: number } | null = null;
-
-  for (const f of facilities) {
-    const fullName = normalizeText(f.name);
-    const typeName = normalizeText(f.type);
-    const fTokens = `${fullName} ${typeName}`
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
-
-    if (fTokens.length === 0) continue;
-
-    let maxTokenScore = 0;
-
-    for (const ft of fTokens) {
-      for (const qt of qTokens) {
-        const s = tokenSimilarity(ft, qt);
-        if (s > maxTokenScore) {
-          maxTokenScore = s;
-        }
-      }
-    }
-
-    if (!bestFacility || maxTokenScore > bestFacility.score) {
-      bestFacility = { id: f.id, score: maxTokenScore };
-    }
-  }
-
-  const MIN_CONFIDENCE = 0.7;
-
-  if (!bestFacility || bestFacility.score < MIN_CONFIDENCE) {
-    return null;
-  }
-
-  return bestFacility.id;
-}
+const GENERIC_FACILITY_TOKENS = new Set([
+  "court",
+  "field",
+  "sports",
+  "sport",
+  "hall",
+  "gym",
+  "centre",
+  "center",
+  "facility",
+  "facilities",
+]);
 
 function normalizeText(text: string): string {
   return text
@@ -114,19 +65,10 @@ function normalizeText(text: string): string {
     .trim();
 }
 
-function tokenSimilarity(a: string, b: string): number {
-  if (a === b) return 1;
-
-  const minLen = Math.min(a.length, b.length);
-  if (minLen >= 3 && (a.startsWith(b) || b.startsWith(a))) {
-    return 0.85;
-  }
-
-  const dist = levenshteinDistance(a, b);
-  const maxLen = Math.max(a.length, b.length);
-  if (maxLen === 0) return 0;
-
-  return 1 - dist / maxLen;
+function tokenizeForFuzzy(text: string): string[] {
+  return normalizeText(text)
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !GENERIC_FACILITY_TOKENS.has(t));
 }
 
 function levenshteinDistance(a: string, b: string): number {
@@ -158,12 +100,111 @@ function levenshteinDistance(a: string, b: string): number {
   return dp[m][n];
 }
 
+function tokenSimilarity(a: string, b: string): number {
+  if (a === b) return 1;
+
+  const minLen = Math.min(a.length, b.length);
+  if (minLen >= 3 && (a.startsWith(b) || b.startsWith(a))) {
+    return 0.85;
+  }
+
+  const dist = levenshteinDistance(a, b);
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 0;
+
+  return 1 - dist / maxLen;
+}
+
+/**
+ * Strict facility match for real logic
+ * Only returns id when the facility name or type is clearly included.
+ */
+function findFacilityIdStrict(
+  question: string,
+  facilities: { id: string; name: string; type: string }[]
+): string | null {
+  const q = normalizeText(question);
+  if (!q) return null;
+
+  for (const f of facilities) {
+    const full = normalizeText(f.name);
+    const type = normalizeText(f.type);
+
+    if (!full && !type) continue;
+
+    if ((full && q.includes(full)) || (type && q.includes(type))) {
+      return f.id;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Fuzzy guess used ONLY for clarification
+ * Example: "bok ball" → "Basketball Court"
+ */
+function guessFacilityForClarification(
+  question: string,
+  facilities: { id: string; name: string; type: string }[]
+): { id: string; name: string } | null {
+  const qTokens = tokenizeForFuzzy(question);
+  if (qTokens.length === 0) return null;
+
+  let best: { id: string; name: string; score: number } | null = null;
+
+  for (const f of facilities) {
+    const fTokens = tokenizeForFuzzy(`${f.name} ${f.type}`);
+    if (fTokens.length === 0) continue;
+
+    let localBest = 0;
+
+    for (const qt of qTokens) {
+      for (const ft of fTokens) {
+        const sim = tokenSimilarity(qt, ft);
+        if (sim > localBest) localBest = sim;
+      }
+    }
+
+    if (!best || localBest > best.score) {
+      best = { id: f.id, name: f.name, score: localBest };
+    }
+  }
+
+  if (!best || best.score < 0.8) {
+    return null;
+  }
+
+  return { id: best.id, name: best.name };
+}
+
+/* --------------------------------
+   Fuzzy booking intent helper
+-------------------------------- */
+
+function hasFuzzyBookingIntentWord(text: string): boolean {
+  const tokens = normalizeText(text).split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+
+  const intentWords = ["book", "booking", "reserve", "schedule"];
+
+  for (const tok of tokens) {
+    for (const target of intentWords) {
+      if (tokenSimilarity(tok, target) >= 0.8) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /* --------------------------------
    Conversation helpers
 -------------------------------- */
 
 function getLastUserText(messages: UIMessage[]): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
     const m = messages[i];
     if (m.role !== "user") continue;
 
@@ -181,8 +222,6 @@ function getLastUserText(messages: UIMessage[]): string | undefined {
 function extractDate(text: string): string | null {
   const lower = text.toLowerCase();
 
-  // Only treat it as a date if there are any date-like words or patterns.
-  // This avoids "8 am" being interpreted as "today at 8 am".
   const hasDateHint =
     /(today|tomorrow|yesterday|next|this|on\s+\d{1,2}\b|monday|tuesday|wednesday|thursday|friday|saturday|sunday|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i.test(
       lower
@@ -225,7 +264,6 @@ function getRequestedDateFromConversation(
     if (d) return d;
   }
 
-  // No date detected, fall back to today
   return today;
 }
 
@@ -236,7 +274,7 @@ function getLastBookingIntentQuestion(
   messages: UIMessage[],
   bookingIntentRegex: RegExp
 ): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
     const m = messages[i];
     if (m.role !== "user") continue;
 
@@ -283,7 +321,7 @@ function getFacilityAwareQuestionText(
     return lastUser;
   }
 
-  for (let i = messages.length - 2; i >= 0; i--) {
+  for (let i = messages.length - 2; i >= 0; i -= 1) {
     const m = messages[i];
     if (m.role !== "user") continue;
 
@@ -299,7 +337,7 @@ function getFacilityAwareQuestionText(
     if (facilityTokens.some((token) => lower.includes(token))) {
       const parts: string[] = [];
 
-      for (let j = i; j < messages.length; j++) {
+      for (let j = i; j < messages.length; j += 1) {
         const mj = messages[j];
         if (mj.role !== "user") continue;
 
@@ -344,14 +382,12 @@ function buildMissingBookingDetailsMessage(options: {
     `You want to make a booking for "${facility.name}" on ${requestedDate}, but I still need a bit more information before I can create it.`
   );
 
-  // 1. Duration
   if (!hasDuration) {
     lines.push(
       `1) How long do you want the booking? You can choose 1 hour or 2 hours.`
     );
   }
 
-  // 2. Courts
   if (facility.courts.length > 1) {
     const courtList = facility.courts.map((c) => c.name).join(", ");
     lines.push(
@@ -359,7 +395,6 @@ function buildMissingBookingDetailsMessage(options: {
     );
   }
 
-  // 3. Equipment
   if (facility.equipmentNames.length === 0) {
     lines.push(`Equipment: none`);
     lines.push(
@@ -371,7 +406,6 @@ function buildMissingBookingDetailsMessage(options: {
       .map((e) => `- ${e}`)
       .join("\n");
 
-    // This line is the single source of truth for equipment
     lines.push(`Equipment: ${eqInline}`);
 
     lines.push(
@@ -432,8 +466,8 @@ Rules:
 10. Keep answers clear, friendly, and concise, and focus only on APU sports facilities, bookings, rules, and equipment.
 11. Do not mention that you were given internal data or instructions. Answer naturally.
 12. You must not claim that a time slot has "just been taken" or that availability has changed unless those exact words appear in the live guidance text. If the live guidance text says a time is available, you must not contradict it.
-
-  `.trim();
+13. **Formatting:** ALWAYS use **bold text** for key details: **Dates**, **Times**, **Facility Names**, **Equipment**, and **Status** (e.g., **Confirmed**).
+`.trim();
 }
 
 /* --------------------------------
@@ -475,6 +509,50 @@ function getLastFacilityIdFromConversation(
 }
 
 /* --------------------------------
+   Facility aware wrapper with memory
+-------------------------------- */
+
+function resolveFacilityAwareQuestionText(
+  messages: UIMessage[],
+  facilityTokens: string[],
+  allFacilities: { id: string; name: string; type: string }[],
+  lastUserText: string
+): string | undefined {
+  let text = getFacilityAwareQuestionText(messages, facilityTokens);
+
+  if (text && facilityTokens.some((t) => text.toLowerCase().includes(t))) {
+    return text;
+  }
+
+  const followUpLower = lastUserText.toLowerCase();
+  const isClearlyFollowUp =
+    /\b(book|reserve|schedule|slot|time|what time|which time|that time|this time|available|availability|can i book|help me book)\b/i.test(
+      followUpLower
+    );
+
+  if (!isClearlyFollowUp) {
+    return text;
+  }
+
+  const lastFacilityId = getLastFacilityIdFromConversation(
+    messages,
+    allFacilities
+  );
+
+  if (!lastFacilityId) {
+    return text;
+  }
+
+  const lastFacility = allFacilities.find((f) => f.id === lastFacilityId);
+  if (!lastFacility) {
+    return text;
+  }
+
+  const synthetic = `${lastFacility.name} ${lastUserText}`.trim();
+  return synthetic || text;
+}
+
+/* --------------------------------
    Main handler
 -------------------------------- */
 
@@ -508,17 +586,23 @@ export async function POST(req: Request) {
 
     const confirmYesRegex = /^(confirm)\b/i;
 
-    const cancelNoRegex =
-      /^(no|nah|nope|cancel|do not book|dont book|don't book)\b/i;
+    const cancelNoRegex = /^(cancel|do not book|dont book|don't book)\b/i;
 
-    // Support 8pm, 8 pm, 14:00, 16:30 etc
+    const rulesQuestionRegex =
+      /\b(rule|rules|regulation|regulations|penalt(?:y|ies)|punishment|punishments|fine|fines|dress code|behaviour|behavior|conduct)\b/i;
+
     const explicitTimeRegex = /\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(am|pm)?\b/i;
 
     const hasExplicitTime = explicitTimeRegex.test(lastUserText);
     const hasAvailabilityKeyword = availabilityRegex.test(lastUserText);
-    const hasBookingIntent = bookingIntentRegex.test(lastUserText);
+
+    const hasRegexBookingIntent = bookingIntentRegex.test(lastUserText);
+    const hasFuzzyBookingIntent = hasFuzzyBookingIntentWord(lastUserText);
+    const hasBookingIntent = hasRegexBookingIntent || hasFuzzyBookingIntent;
+
     const isConfirm = confirmYesRegex.test(lastUserText);
     const isCancel = cancelNoRegex.test(lastUserText);
+    const isRulesQuestion = rulesQuestionRegex.test(lastUserText);
 
     const isFacilitiesQuestion =
       facilitiesQuestionRegex.test(lastUserText) ||
@@ -533,7 +617,6 @@ export async function POST(req: Request) {
       ? explicitTimeRegex.test(lastBookingQuestionText)
       : false;
 
-    // Treat it as a booking conversation if any message had booking intent
     const isBookingConversation =
       hasBookingIntent || Boolean(lastBookingQuestionText);
 
@@ -550,52 +633,15 @@ export async function POST(req: Request) {
 
     const today = getMalaysiaToday();
 
-    // Existing helper based on user messages only
     const facilityQuestionTextForBooking = getFacilityAwareQuestionText(
       uiMessages,
       facilityTokens
     );
 
-    // Facility memory awareness wrapper
-    function resolveFacilityAwareQuestionText(
-      messages: UIMessage[],
-      facilityTokens: string[],
-      allFacilities: { id: string; name: string; type: string }[],
-      lastUserText: string
-    ): string | undefined {
-      // First, try the existing logic
-      let text = getFacilityAwareQuestionText(messages, facilityTokens);
-
-      if (text && facilityTokens.some((t) => text.toLowerCase().includes(t))) {
-        return text;
-      }
-
-      // Try to fall back to the last facility mentioned in the conversation
-      const lastFacilityId = getLastFacilityIdFromConversation(
-        messages,
-        allFacilities
-      );
-
-      if (!lastFacilityId) {
-        return text;
-      }
-
-      const lastFacility = allFacilities.find((f) => f.id === lastFacilityId);
-      if (!lastFacility) {
-        return text;
-      }
-
-      // Build a synthetic question like:
-      // "Basketball Court ok can you show me the availability for tomorrow?"
-      const synthetic = `${lastFacility.name} ${lastUserText}`.trim();
-      return synthetic || text;
-    }
-
     const conversationHasTime = facilityQuestionTextForBooking
       ? explicitTimeRegex.test(facilityQuestionTextForBooking)
       : false;
 
-    // Follow up availability after a booking conversation
     const isFollowUpAvailability =
       !hasBookingIntent &&
       hasAvailabilityKeyword &&
@@ -638,7 +684,7 @@ Please say something like:
 - "Help me book Basketball Court on Friday at 5pm"`;
         }
       } else {
-        const facilityId = findFacilityIdFromQuestion(
+        const facilityId = findFacilityIdStrict(
           facilityQuestionText,
           allFacilities
         );
@@ -678,15 +724,13 @@ Please say something like:
             let chosenEquipmentNamesFromText: string[] = [];
 
             if (facilityForPrompt.equipmentNames.length === 0) {
-              // No equipment in this facility, nothing for the user to decide
               hasEquipmentDecision = true;
             } else {
               deniesEquipment =
-                /\b(no equipment|no need equipment|do not need equipment|dont need equipment)\b/i.test(
+                /\b(no equipment|no need equipment|do not need equipment|dont need equipment|no\b|none\b|nothing\b)\b/i.test(
                   qLower
                 );
 
-              // Capture all equipment items the user mentioned
               chosenEquipmentNamesFromText =
                 facilityForPrompt.equipmentNames.filter((name) =>
                   qLower.includes(name.toLowerCase())
@@ -696,8 +740,7 @@ Please say something like:
                 deniesEquipment || chosenEquipmentNamesFromText.length > 0;
             }
 
-            // If details are still missing, do not create booking
-            if (!hasDuration || !hasEquipmentDecision) {
+            if (!hasDuration) {
               dynamicContext = buildMissingBookingDetailsMessage({
                 facility: facilityForPrompt,
                 requestedDate,
@@ -705,7 +748,6 @@ Please say something like:
                 hasEquipmentDecision,
               });
             } else {
-              // All details gathered, now compute suggestion and create booking
               const suggestion = await getBookingSuggestionFromQuestion({
                 questionText: facilityQuestionText,
                 requestedDate,
@@ -716,9 +758,8 @@ Please say something like:
               } else if (suggestion.reason) {
                 dynamicContext = suggestion.reason;
               } else {
-                // Override equipment choice with what the user said
                 if (facilityForPrompt.equipmentNames.length > 0) {
-                  if (deniesEquipment) {
+                  if (deniesEquipment || !hasEquipmentDecision) {
                     suggestion.chosenEquipmentNames = [];
                   } else if (chosenEquipmentNamesFromText.length > 0) {
                     suggestion.chosenEquipmentNames =
@@ -781,9 +822,10 @@ ${equipmentLineForUser}
 ${equipmentSourceOfTruth}
 
 In your reply:
+- Clearly say that the booking is confirmed.
 - Confirm the booking details exactly as shown.
 - When mentioning equipment copy the Equipment line exactly.
-- Do not suggest any other times.
+- Remind the user to arrive on time and follow any facility rules.
 You may remind the user they can view it in My Bookings.
       `.trim();
                 }
@@ -813,16 +855,64 @@ You may remind the user they can view it in My Bookings.
       }
     }
 
-    /* 4. Availability flows
-          - Pure availability, for example "What time is Basketball free on Friday?"
-          - Follow up in a booking conversation like "what time is available then?"
-          - Start of booking flow when the user asks "what time can I book...?"
-    */
+    /* 3b. Rules and policy questions */
+
+    if (!dynamicContext && isRulesQuestion) {
+      const facilityIdForRules = findFacilityIdStrict(
+        lastUserText,
+        allFacilities
+      );
+
+      if (!facilityIdForRules) {
+        if (facilityNames.length === 0) {
+          dynamicContext =
+            "The user is asking about rules or penalties, but there are no active facilities configured in the system yet.";
+        } else {
+          dynamicContext = `The user is asking about rules or policies, but did not clearly mention which facility.
+
+Active facilities:
+${facilityNames.join("\n")}
+
+In your reply:
+- Ask the user to choose exactly one facility from the list above.
+- Do not guess which facility they mean.
+- Do not describe very specific rules or punishments that might be wrong for a particular facility.`;
+        }
+      } else {
+        const facilityRow = await prisma.facility.findUnique({
+          where: { id: facilityIdForRules },
+        });
+
+        if (!facilityRow) {
+          dynamicContext =
+            "The user is asking about rules for a facility that no longer exists in the system.";
+        } else {
+          dynamicContext = `The user is asking about rules or policies for "${facilityRow.name}".
+
+There is no separate rules table in the live data. You must answer using:
+- The general guidance from the FAQ.
+- The fact that the user is interested in "${facilityRow.name}".
+
+In your reply:
+- Mention the facility name "${facilityRow.name}" clearly.
+- Explain the general booking and usage rules that apply at APU, such as:
+  - Arriving on time.
+  - Using proper sports attire and non marking shoes if relevant.
+  - Taking care of the equipment and facilities.
+  - Respecting booking durations and other users.
+- If the FAQ mentions anything about penalties for no shows or damage, you may include those.
+- Do not invent detailed punishments, money fines, or disciplinary actions that are not stated in the FAQ or system guidance.
+- If something is not clearly specified, say that students should follow the posted rules at the sports centre or ask staff for the most accurate information.`;
+        }
+      }
+    }
+
+    /* 4. Availability flows */
 
     if (
       !dynamicContext &&
       !isFacilitiesQuestion &&
-      hasAvailabilityKeyword &&
+      (hasAvailabilityKeyword || hasBookingIntent || isFollowUpAvailability) &&
       !hasExplicitTime &&
       !isConfirm &&
       !isCancel
@@ -882,7 +972,7 @@ Ask about one facility at a time, for example:
           }
         }
       } else {
-        const facilityId = findFacilityIdFromQuestion(
+        const facilityId = findFacilityIdStrict(
           facilityQuestionText,
           allFacilities
         );
@@ -914,7 +1004,7 @@ Ask about one facility at a time, for example:
                 closeTime,
                 date,
                 courtBookings,
-                new Date()
+                getMalaysiaNow()
               );
 
               if (free.length === 0) {
@@ -926,8 +1016,23 @@ Ask about one facility at a time, for example:
               }
             }
 
+            let courtInstruction = "";
+
+            if (courts.length === 1) {
+              courtInstruction = `
+This facility has only one court: "${courts[0].name}".
+
+In your reply:
+- Do not mention any other courts.
+- Do not ask the user to choose a court.
+- Always assume bookings use "${courts[0].name}".`;
+            } else {
+              courtInstruction = `
+In your reply:
+- Ask the user which COURT they want from the list above.`;
+            }
+
             if (!wantsBookingFlow) {
-              // Pure availability only
               dynamicContext = `Availability for "${facility.name}" on ${date}:
 
 ${lines.join("\n")}
@@ -938,7 +1043,6 @@ In your reply:
 - Do not ask for duration or equipment yet.
 - If they later ask "can you book 10am" or similar, you will handle the booking in a separate step.`;
             } else {
-              // Availability plus booking flow start
               const equipmentRows = await prisma.equipment.findMany({
                 where: { facilityId: facility.id },
               });
@@ -959,16 +1063,18 @@ This facility currently has no equipment configured in the system. If the user n
 
               dynamicContext = `Availability for "${facility.name}" on ${date}:
 
-${lines.join("\n")}${equipmentSection}
+${lines.join("\n")}
+
+${courtInstruction}
+${equipmentSection}
 
 In your reply:
 - First, show these available times clearly once. Do not print the same list again after that.
 - Then treat this as the start of a booking flow.
 - Ask the user:
-  1) Which COURT they want (if there is more than one court).
-  2) Which START TIME they want from the list.
-  3) How long they want the booking (1 hour or 2 hours).
-  4) Whether they want any equipment or no equipment.
+  1) Which START TIME they want from the list.
+  2) How long they want the booking (1 hour or 2 hours).
+  3) Whether they want any equipment or no equipment.
 - Do not ask them for the date again. Use ${date} as the booking date.`;
             }
           }
@@ -976,11 +1082,7 @@ In your reply:
       }
     }
 
-    /* 5. Booking intent with explicit time, based on the whole conversation
-          - Direct "book at 6pm"
-          - "6pm works" after earlier booking question
-          - "can you book that time" after picking a slot
-    */
+    /* 5. Booking intent with explicit time */
 
     const shouldHandleBookingWithTime =
       !dynamicContext &&
@@ -1029,7 +1131,7 @@ Please say something like:
 - "Help me book Basketball Court on Friday at 5pm"`;
         }
       } else {
-        const facilityId = findFacilityIdFromQuestion(
+        const facilityId = findFacilityIdStrict(
           facilityQuestionText,
           allFacilities
         );
@@ -1069,7 +1171,7 @@ Please say something like:
               hasEquipmentDecision = true;
             } else {
               const deniesEquipment =
-                /\b(no equipment|no need equipment|do not need equipment|dont need equipment)\b/i.test(
+                /\b(no equipment|no need equipment|do not need equipment|dont need equipment|no\b|none\b|nothing\b)\b/i.test(
                   qLower
                 );
 
@@ -1081,7 +1183,6 @@ Please say something like:
               hasEquipmentDecision = deniesEquipment || mentionsAnyEquipment;
             }
 
-            // Always compute a suggestion so we know if the requested time is actually free
             const suggestion = await getBookingSuggestionFromQuestion({
               questionText: facilityQuestionText,
               requestedDate,
@@ -1131,7 +1232,6 @@ In your reply:
 Do not say you still need to check availability for this time and do not suggest any other times.
     `.trim();
               } else {
-                // Requested time is not free, suggest only the nearest slot
                 const equipmentLineWithLabel =
                   facilityForPrompt.equipmentNames.length > 0
                     ? `Equipment: ${facilityForPrompt.equipmentNames.join(
@@ -1161,9 +1261,6 @@ Do not invent any extra alternative times.
                 `.trim();
               }
             } else {
-              // We have facility, time, duration, and equipment decision,
-              // but the booking should only be created after the user types "confirm".
-
               const durationLabel = /\b2\s*hours|two\s*hours\b/i.test(
                 facilityQuestionText
               )
@@ -1187,6 +1284,7 @@ Planned booking:
 - Date: ${suggestion.date}
 - Time: ${suggestion.suggestedTimeLabel}
 - Duration: ${durationLabel}
+
 ${equipmentLine}
 
 In your reply:
@@ -1204,7 +1302,49 @@ In your reply:
       }
     }
 
-    // 6. Fallback: normal FAQ based chat if no dynamicContext was set
+    /* 6. Safeguard for typos or unclear intent
+          This prevents hallucination when nothing matched above.
+    */
+
+    if (!dynamicContext) {
+      const guess = guessFacilityForClarification(lastUserText, allFacilities);
+
+      if (guess) {
+        dynamicContext = `
+The last user message was: "${lastUserText}".
+
+The system has a fuzzy guess that the user might be talking about the facility "${guess.name}", but this is NOT certain.
+
+In your reply:
+- Do NOT create any booking.
+- Do NOT show availability yet.
+- Ask a short clarification question such as:
+  "Did you mean ${guess.name}?"
+- If they say yes, tell them to ask again clearly, for example:
+  "Book ${guess.name} tomorrow at 6pm"
+  or
+  "What time is ${guess.name} available on Friday?"
+- If they say no, ask them to type the facility name clearly from the list of active facilities, or say which sport they want.
+`.trim();
+      } else {
+        dynamicContext = `
+The last user message was: "${lastUserText}".
+
+The system could not confidently detect any:
+- specific facility name, or
+- clear booking or availability question.
+
+In your reply:
+- Politely explain that you are not fully sure what they mean.
+- Ask them to mention ONE facility and what they want, for example:
+  - "Book Basketball Court tomorrow at 6pm"
+  - "What time is Football Field available on Friday?"
+- Do NOT invent any facilities, equipment, times or bookings.
+`.trim();
+      }
+    }
+
+    // 7. Final model call
 
     const result = streamText({
       model: groq(process.env.GROQ_MODEL ?? "llama-3.1-8b-instant"),

@@ -41,9 +41,9 @@ export const FACILITY_FAQ: FaqItem[] = [
       "Wear proper sports attire and non marking shoes for indoor courts. Avoid footwear or accessories that may damage the surface or cause injury to you or others.",
   },
   {
-    question: "Is there a mobile app for this booking system",
+    question: "Is there a mobile app for this booking system?",
     answer:
-      "Yes. The system is a Progressive Web App (PWA), which means you can install it on your phone like a normal app. Once installed, it opens in its own window and can send you booking notifications.",
+      "We do not offer a native mobile application at this time. However, the platform is designed as a Progressive Web App (PWA), allowing you to install it directly on your mobile device. Once installed, it functions similarly to a standard app, providing a seamless experience along with booking notifications.",
   },
   {
     question: "How do I install the PWA on Android",

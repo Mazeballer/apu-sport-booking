@@ -12,11 +12,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+// CONFIGURATION:
+const BRAND_COLOR = "#005596";
+const GRADIENT_STYLE = {
+  backgroundImage: `linear-gradient(135deg, ${BRAND_COLOR} 0%, #6366f1 100%)`,
+};
+
 const SUGGESTED_QUESTIONS = [
-  "What facilities are available today?",
+  "What facilities are available?",
   "Can I bring my own equipment?",
   "How do I cancel a booking?",
-  "What are the opening hours?",
+  "Opening hours?",
 ];
 
 export function ChatWidget() {
@@ -35,17 +41,11 @@ export function ChatWidget() {
 
   const isLoading = status !== "ready";
 
-  // Auto scroll to bottom on new messages or when chat opens
   useEffect(() => {
     if (!bottomRef.current) return;
-
-    bottomRef.current.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    });
+    bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, isOpen]);
 
-  // Lock page scroll while cursor is over the chat widget
   useEffect(() => {
     if (isOpen && hoveringChat) {
       const previous = document.body.style.overflow;
@@ -56,10 +56,8 @@ export function ChatWidget() {
     }
   }, [isOpen, hoveringChat]);
 
-  // Speech recognition setup
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const AnyWindow = window as any;
     const RecognitionClass =
       AnyWindow.SpeechRecognition || AnyWindow.webkitSpeechRecognition;
@@ -82,20 +80,13 @@ export function ChatWidget() {
       setInputValue(text.trim());
     };
 
-    recognition.onerror = () => {
-      setIsRecording(false);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
 
     recognitionRef.current = recognition;
     setSpeechSupported(true);
 
-    return () => {
-      recognition.stop();
-    };
+    return () => recognition.stop();
   }, []);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -112,15 +103,11 @@ export function ChatWidget() {
   };
 
   const toggleRecording = () => {
-    if (!speechSupported || !recognitionRef.current) {
-      return;
-    }
-
+    if (!speechSupported || !recognitionRef.current) return;
     if (isRecording) {
       recognitionRef.current.stop();
       return;
     }
-
     setInputValue("");
     setIsRecording(true);
     try {
@@ -130,65 +117,75 @@ export function ChatWidget() {
     }
   };
 
-  // Dynamic follow up suggestions based on the last user message
+  // Follow up suggestions logic...
   const lastUserMessage = [...messages]
+    .slice()
     .reverse()
     .find((m) => m.role === "user");
+  const lastAssistantMessage = [...messages]
+    .slice()
+    .reverse()
+    .find((m) => m.role === "assistant");
 
   const followUpSuggestions = (() => {
-    if (!lastUserMessage) return [];
+    if (!lastUserMessage && !lastAssistantMessage) return [];
 
-    const text = lastUserMessage.parts
-      .filter((p) => p.type === "text")
-      .map((p) => (p as any).text as string)
-      .join(" ")
-      .toLowerCase();
+    const extractText = (msg: (typeof messages)[number] | undefined) =>
+      msg
+        ? msg.parts
+            .filter((p) => p.type === "text")
+            .map((p) => (p as any).text as string)
+            .join(" ")
+            .toLowerCase()
+        : "";
 
-    if (text.includes("available") || text.includes("time")) {
-      return [
-        "Can you help me book one of these times?",
-        "What equipment can I borrow for this facility?",
-        "What happens if I cancel this booking?",
-      ];
+    const userText = extractText(lastUserMessage);
+    const assistantText = extractText(lastAssistantMessage);
+    const suggestions = new Set<string>();
+
+    if (
+      assistantText.includes("availability") ||
+      assistantText.includes("time slots")
+    ) {
+      suggestions.add("Book one of these times");
+      suggestions.add("Check another day");
     }
-
-    if (text.includes("book") || text.includes("reserve")) {
-      return [
-        "Can you summarise my booking details?",
-        "What are the rules for this facility?",
-        "Show me other available times for this facility.",
-      ];
+    if (assistantText.includes("how long")) {
+      suggestions.add("1 hour");
+      suggestions.add("2 hours");
     }
-
-    if (text.includes("equipment") || text.includes("borrow")) {
-      return [
-        "Do I need to return the equipment at the same place?",
-        "Are there any penalties for late returns?",
-        "What facilities can I use this equipment for?",
-      ];
+    if (assistantText.includes("equipment")) {
+      suggestions.add("No equipment needed");
+      suggestions.add("Borrow both equipment");
     }
-
-    return [
-      "What facilities can I book today?",
-      "What happens if I do not show up?",
-      "How do I reschedule my booking?",
-    ];
+    if (assistantText.includes("booking has been created")) {
+      suggestions.add("Summarise my booking");
+      suggestions.add("Cancel this booking");
+    }
+    if (userText.includes("book") || userText.includes("reserve")) {
+      suggestions.add("Rules?");
+      suggestions.add("No-show policy?");
+    }
+    if (suggestions.size === 0) {
+      suggestions.add("What facilities?");
+      suggestions.add("Cancellation policy?");
+    }
+    return Array.from(suggestions);
   })();
 
   return (
     <>
-      {/* Floating chat button */}
       {!isOpen && (
         <Button
           onClick={() => setIsOpen(true)}
           size="icon"
-          className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 h-16 w-16 rounded-full shadow-xl bg-blue-600 hover:bg-blue-700 text-white border-0 transition-all duration-300 hover:scale-110 flex items-center justify-center z-50"
+          style={GRADIENT_STYLE}
+          className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 h-16 w-16 rounded-full shadow-2xl text-white border-0 transition-all duration-300 hover:scale-110 flex items-center justify-center z-50 hover:brightness-110"
         >
-          <Sparkles className="h-10 w-10 text-yellow-300 animate-pulse" />
+          <Sparkles className="h-8 w-8 text-yellow-300 animate-pulse" />
         </Button>
       )}
 
-      {/* Chat window */}
       {isOpen && (
         <Card
           className="fixed bottom-2 left-2 right-2 sm:left-auto sm:right-8 sm:bottom-8
@@ -197,40 +194,30 @@ export function ChatWidget() {
                      flex flex-col min-h-0 shadow-2xl
                      bg-white dark:bg-[#0f1419]
                      border-gray-200 dark:border-gray-800
-                     z-50"
+                     z-50 overflow-hidden"
           onMouseEnter={() => setHoveringChat(true)}
           onMouseLeave={() => setHoveringChat(false)}
         >
           {/* Header */}
-          <div className="relative flex items-center justify-between p-4 bg-blue-600">
+          <div
+            className="relative flex items-center justify-between p-4 shadow-md z-10"
+            style={GRADIENT_STYLE}
+          >
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/30">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="h-6 w-6 text-white"
-                >
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                  <path d="M12 2v4" />
-                  <circle cx="12" cy="2" r="1" />
-                  <circle cx="9" cy="10" r="1" fill="currentColor" />
-                  <circle cx="15" cy="10" r="1" fill="currentColor" />
-                  <path d="M9 14h6" />
-                </svg>
+                <Sparkles className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-white text-lg">
-                  AI Assistant
+                <h3 className="font-bold text-white text-lg tracking-wide">
+                  Assistant
                 </h3>
-                <p className="text-xs text-white/80 flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-                  Online
+                <p className="text-xs text-white/90 flex items-center gap-1 font-medium">
+                  <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse border border-white/50" />
+                  Always Active
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
                 type="button"
                 variant="ghost"
@@ -239,7 +226,7 @@ export function ChatWidget() {
                   setMessages([]);
                   setInputValue("");
                 }}
-                className="h-8 px-3 text-xs text-white bg-white/10 hover:bg-white/20 rounded-full"
+                className="h-8 px-3 text-xs text-white hover:bg-white/20 rounded-full transition-colors"
               >
                 Reset
               </Button>
@@ -247,35 +234,37 @@ export function ChatWidget() {
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsOpen(false)}
-                className="h-8 w-8 text-white hover:bg-white/20 rounded-full"
+                className="h-8 w-8 text-white hover:bg-white/20 rounded-full transition-colors"
               >
                 <X className="h-5 w-5" />
               </Button>
             </div>
           </div>
 
-          {/* Messages + suggestions */}
-          <ScrollArea className="flex-1 min-h-0 bg-gray-50 dark:bg-[#0f1419]">
-            <div className="p-6 space-y-4">
+          {/* Messages */}
+          <ScrollArea className="flex-1 min-h-0 bg-gray-50/50 dark:bg-[#0f1419]">
+            <div className="p-4 space-y-6">
               {messages.length === 0 && !isLoading && (
-                <div className="text-center pb-4">
-                  <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30 mb-4">
-                    <Sparkles className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                <div className="text-center pt-8 pb-4 px-4">
+                  <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/10 mb-4 shadow-sm">
+                    <Sparkles
+                      className="h-8 w-8"
+                      style={{ color: BRAND_COLOR }}
+                    />
                   </div>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm font-medium">
-                    Welcome to AI Assistant
+                  <h3 className="text-gray-900 dark:text-gray-100 font-semibold mb-1">
+                    How can I help you?
+                  </h3>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
+                    Ask about bookings, times, or rules.
                   </p>
-                  <p className="text-gray-500 dark:text-gray-500 text-xs mt-1">
-                    Ask me about facilities, bookings, or rules.
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <div className="flex flex-wrap justify-center gap-2">
                     {SUGGESTED_QUESTIONS.map((q) => (
                       <button
                         key={q}
                         type="button"
                         onClick={() => handleSuggestionClick(q)}
-                        className="text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition"
+                        className="text-xs px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-gray-700 transition shadow-sm"
                       >
                         {q}
                       </button>
@@ -291,77 +280,67 @@ export function ChatWidget() {
                     message.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  <div className="flex items-start gap-2 max-w-[85%]">
+                  <div className="flex items-end gap-2 max-w-[85%]">
                     {message.role === "assistant" && (
-                      <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          className="h-5 w-5 text-white"
-                        >
-                          <rect x="6" y="6" width="12" height="12" rx="2" />
-                          <circle cx="9" cy="10" r="1" fill="currentColor" />
-                          <circle cx="15" cy="10" r="1" fill="currentColor" />
-                          <path d="M9 14h6" />
-                        </svg>
+                      <div
+                        className="h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 mb-1"
+                        style={GRADIENT_STYLE}
+                      >
+                        <Sparkles className="h-3 w-3 text-white" />
                       </div>
                     )}
                     <div
-                      className={`rounded-2xl px-4 py-3 shadow-sm ${
+                      style={message.role === "user" ? GRADIENT_STYLE : {}}
+                      className={`px-4 py-3 shadow-sm ${
                         message.role === "user"
-                          ? "bg-blue-600 text-white rounded-br-sm"
-                          : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-sm"
+                          ? "text-white rounded-2xl rounded-br-none"
+                          : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-100 dark:border-gray-700 rounded-2xl rounded-bl-none"
                       }`}
                     >
                       {message.parts.map((part, index) => {
                         if (part.type !== "text") return null;
-
-                        // User messages, plain text
                         if (message.role === "user") {
                           return (
                             <p
                               key={index}
-                              className="text-sm leading-relaxed whitespace-pre-wrap"
+                              className="text-sm whitespace-pre-wrap font-medium"
                             >
                               {part.text}
                             </p>
                           );
                         }
-
-                        // Assistant messages, render Markdown
                         return (
                           <div
                             key={index}
-                            className="text-sm leading-relaxed prose prose-sm prose-slate dark:prose-invert max-w-none"
+                            className="text-[15px] leading-relaxed"
                           >
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
                               components={{
-                                p: ({ node, ...props }) => (
-                                  <p className="mb-1 last:mb-0" {...props} />
+                                strong: ({ node, ...props }) => (
+                                  <span
+                                    className="font-bold"
+                                    style={{ color: BRAND_COLOR }}
+                                    {...props}
+                                  />
                                 ),
                                 ul: ({ node, ...props }) => (
                                   <ul
-                                    className="list-disc pl-4 mb-1"
+                                    className="list-disc pl-5 my-2 space-y-1"
                                     {...props}
                                   />
                                 ),
                                 ol: ({ node, ...props }) => (
                                   <ol
-                                    className="list-decimal pl-4 mb-1"
+                                    className="list-decimal pl-5 my-2 space-y-1"
                                     {...props}
                                   />
                                 ),
                                 li: ({ node, ...props }) => (
-                                  <li className="mb-0.5" {...props} />
+                                  <li className="pl-1" {...props} />
                                 ),
-                                strong: ({ node, ...props }) => (
-                                  <strong
-                                    className="font-semibold"
-                                    {...props}
-                                  />
+                                p: ({ node, ...props }) => (
+                                  <p className="mb-2 last:mb-0" {...props} />
                                 ),
                               }}
                             >
@@ -377,59 +356,44 @@ export function ChatWidget() {
 
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="flex items-start gap-2">
-                    <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="h-5 w-5 text-white"
-                      >
-                        <rect x="6" y="6" width="12" height="12" rx="2" />
-                        <circle cx="9" cy="10" r="1" fill="currentColor" />
-                        <circle cx="15" cy="10" r="1" fill="currentColor" />
-                        <path d="M9 14h6" />
-                      </svg>
+                  <div className="flex items-end gap-2">
+                    <div
+                      className="h-6 w-6 rounded-full flex items-center justify-center mb-1"
+                      style={GRADIENT_STYLE}
+                    >
+                      <Sparkles className="h-3 w-3 text-white" />
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl rounded-bl-sm px-4 py-3 border border-gray-200 dark:border-gray-700">
-                      <div className="flex gap-1">
-                        <div
-                          className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"
-                          style={{ animationDelay: "0ms" }}
-                        />
-                        <div
-                          className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"
-                          style={{ animationDelay: "150ms" }}
-                        />
-                        <div
-                          className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"
-                          style={{ animationDelay: "300ms" }}
-                        />
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl rounded-bl-none px-4 py-3 border border-gray-100 dark:border-gray-700 shadow-sm">
+                      <div className="flex gap-1.5">
+                        <div className="h-2 w-2 bg-gray-300 rounded-full animate-bounce" />
+                        <div className="h-2 w-2 bg-gray-300 rounded-full animate-bounce delay-75" />
+                        <div className="h-2 w-2 bg-gray-300 rounded-full animate-bounce delay-150" />
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {messages.length > 0 && followUpSuggestions.length > 0 && (
-                <div className="pt-2 flex flex-wrap gap-2">
-                  {followUpSuggestions.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => handleSuggestionClick(q)}
-                      className="text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition"
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               <div ref={bottomRef} />
             </div>
           </ScrollArea>
+
+          {/* Suggestions */}
+          {messages.length > 0 &&
+            followUpSuggestions.length > 0 &&
+            !isLoading && (
+              <div className="px-4 py-2 bg-gray-50 dark:bg-[#0f1419] border-t border-gray-100 dark:border-gray-800 flex overflow-x-auto gap-2 no-scrollbar">
+                {followUpSuggestions.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => handleSuggestionClick(q)}
+                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition font-medium whitespace-nowrap"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
 
           {/* Input */}
           <form
@@ -438,35 +402,33 @@ export function ChatWidget() {
             className="p-4 bg-white dark:bg-[#0a0f1e] border-t border-gray-200 dark:border-gray-800"
           >
             <div className="flex gap-2 items-center">
-              <Input
-                name="chat-message"
-                placeholder="Ask about facilities, bookings..."
-                disabled={isLoading}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="none"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                className="flex-1 bg-gray-50 dark:bg-[#0f1419] border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-600 rounded-full px-4 h-11"
-              />
+              <div className="relative flex-1">
+                <Input
+                  name="chat-message"
+                  placeholder="Type a message..."
+                  disabled={isLoading}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  className="w-full bg-gray-100/50 dark:bg-[#161b22] border-0 focus:ring-2 focus:ring-blue-500/20 text-gray-900 dark:text-white placeholder:text-gray-400 rounded-full px-4 h-11"
+                />
+              </div>
 
-              {/* Voice button */}
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
                 disabled={!speechSupported || isLoading}
                 onClick={toggleRecording}
-                className={`h-11 w-11 rounded-full border ${
+                className={`h-11 w-11 rounded-full transition-all ${
                   isRecording
-                    ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
-                    : "border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200"
+                    ? "bg-red-50 text-red-500 hover:bg-red-100"
+                    : "bg-gray-100/50 text-gray-500 hover:bg-gray-100"
                 }`}
               >
                 {isRecording ? (
-                  <MicOff className="h-4 w-4" />
+                  <MicOff className="h-5 w-5 animate-pulse" />
                 ) : (
-                  <Mic className="h-4 w-4" />
+                  <Mic className="h-5 w-5" />
                 )}
               </Button>
 
@@ -474,9 +436,10 @@ export function ChatWidget() {
                 type="submit"
                 size="icon"
                 disabled={isLoading}
-                className="bg-blue-600 hover:bg-blue-700 text-white h-11 w-11 rounded-full shadow-lg transition-all hover:scale-105"
+                style={GRADIENT_STYLE}
+                className="text-white h-11 w-11 rounded-full shadow-lg transition-all hover:scale-105 hover:brightness-110 border-0 flex-shrink-0"
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-4 w-4 rotate-45 mr-1" />
               </Button>
             </div>
           </form>
