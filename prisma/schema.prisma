@@ -18,7 +18,10 @@ model User {
   name      String             @default("")
   bookings  Booking[]
   decisions EquipmentRequest[] @relation("Decider")
-  pushSubs  PushSubscription[]
+  pushSubs  PushSubscription[] 
+  chatMinuteLimits ChatRateLimitMinute[]
+  chatDayLimits    ChatRateLimitDay[]
+
 }
 
 model Facility {
@@ -148,6 +151,33 @@ model FacilityNotificationLog {
   @@index([facilityId, kind, createdAt])
   @@index([processed, createdAt])
 }
+
+model ChatRateLimitMinute {
+  userId    String
+  minuteKey String // "YYYY-MM-DDTHH:MM" in Malaysia time
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, minuteKey])
+  @@index([minuteKey])
+}
+
+model ChatRateLimitDay {
+  userId   String
+  dayKey   String // "YYYY-MM-DD" in Malaysia time
+  count    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, dayKey])
+  @@index([dayKey])
+}
+
 
 /// ===========================
 /// Enums
