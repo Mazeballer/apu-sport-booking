@@ -6,8 +6,54 @@ import { Navbar } from "@/components/navbar";
 import { AuthGuard } from "@/components/auth-guard";
 import { BookingFlow } from "@/components/booking-flow";
 import { getCurrentUser } from "@/lib/authz";
+import { assertBookingLimit } from "@/lib/booking-limits";
 
 export const revalidate = 0;
+
+const MY_TZ = "Asia/Kuala_Lumpur";
+
+function malaysiaDateTimeToUtcDate(dateYYYYMMDD: string, timeHHmm: string) {
+  const [y, m, d] = dateYYYYMMDD.split("-").map(Number);
+  const [hh, mm] = timeHHmm.split(":").map(Number);
+
+  // Create a Date that represents the Malaysia wall clock time,
+  // using Intl to compute the equivalent UTC instant.
+  const approxUtc = new Date(Date.UTC(y, m - 1, d, hh, mm, 0, 0));
+
+  // Figure out the timezone offset between MY and UTC at that instant
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: MY_TZ,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+    .formatToParts(approxUtc)
+    .reduce<Record<string, string>>((acc, p) => {
+      if (p.type !== "literal") acc[p.type] = p.value;
+      return acc;
+    }, {});
+
+  const myAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second)
+  );
+
+  // Adjust so that “MY wall time” maps to the correct UTC instant
+  const diffMs = myAsUtc - approxUtc.getTime();
+  return new Date(approxUtc.getTime() - diffMs);
+}
+
+function addHoursUtc(d: Date, hours: number) {
+  return new Date(d.getTime() + hours * 60 * 60 * 1000);
+}
 
 export default async function BookFacilityPage({
   params,
@@ -128,8 +174,9 @@ export default async function BookFacilityPage({
   async function createBooking(payload: {
     facilityId: string;
     courtId: string;
-    startISO: string;
-    endISO: string;
+    date: string; // "YYYY-MM-DD" in Malaysia date
+    time: string; // "HH:mm"
+    durationHours: 1 | 2;
     equipmentIds: string[];
     notes?: string;
   }) {
@@ -138,8 +185,14 @@ export default async function BookFacilityPage({
     const user = await getCurrentUser();
     if (!user) throw new Error("Unauthorized");
 
-    const start = new Date(payload.startISO);
-    const end = new Date(payload.endISO);
+    // build dates in Malaysia timezone (then store as UTC Date)
+    const start = malaysiaDateTimeToUtcDate(payload.date, payload.time);
+    const end = addHoursUtc(start, payload.durationHours);
+
+    await assertBookingLimit({
+      userId: user.id,
+      start,
+    });
 
     // 1) verify court belongs to this facility and is active
     const belongs = await prisma.court.findFirst({

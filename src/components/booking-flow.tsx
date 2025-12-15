@@ -61,8 +61,9 @@ interface BookingFlowProps {
   onCreateBooking: (payload: {
     facilityId: string;
     courtId: string;
-    startISO: string;
-    endISO: string;
+    date: string; // "YYYY-MM-DD" Malaysia date
+    time: string; // "HH:mm"
+    durationHours: 1 | 2;
     equipmentIds: string[];
     notes?: string;
   }) => Promise<void>;
@@ -237,14 +238,15 @@ export function BookingFlow({
 
     setIsConfirming(true);
     try {
-      const start = buildDateAtTime(selectedDate, selectedTime);
-      const end = addHours(start, selectedDuration);
+      const date = selectedDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+      const time = selectedTime; // already "HH:mm"
 
       await onCreateBooking({
         facilityId: facility.id,
         courtId: selectedCourt,
-        startISO: start.toISOString(),
-        endISO: end.toISOString(),
+        date,
+        time,
+        durationHours: selectedDuration,
         equipmentIds: selectedEquipment,
         notes: equipmentNotes || undefined,
       });
@@ -252,10 +254,17 @@ export function BookingFlow({
       notify.success(
         `Booking confirmed for ${
           facility.name
-        } on ${selectedDate?.toLocaleDateString()} at ${selectedTime}`
+        } on ${selectedDate.toLocaleDateString()} at ${selectedTime}`
       );
 
       router.push("/");
+    } catch (err: any) {
+      const msg =
+        typeof err?.message === "string" && err.message.trim().length > 0
+          ? err.message
+          : "Booking failed. Please try again.";
+
+      notify.error(msg);
     } finally {
       setIsConfirming(false);
     }

@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { Suspense, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { notify } from '@/lib/toast';
+import { Suspense, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { notify } from "@/lib/toast";
 
 import {
   Card,
@@ -15,27 +15,27 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { InfoIcon } from 'lucide-react';
-import { createBrowserClient } from '@/lib/supabase/client';
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InfoIcon } from "lucide-react";
+import { createBrowserClient } from "@/lib/supabase/client";
 
 /* ---------------------- Login Inner Component ---------------------- */
 /* This component actually uses useSearchParams(), so it’s wrapped in Suspense */
 function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const redirect = params.get('redirect') || '/';
+  const redirect = params.get("redirect") || "/";
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
+    setError("");
 
     try {
       const supabase = createBrowserClient();
@@ -49,45 +49,45 @@ function LoginInner() {
 
       // 2) Bridge session tokens for SSR middleware
       const session = data.session;
-      const bridge = await fetch('/api/auth/set-session', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const bridge = await fetch("/api/auth/set-session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           access_token: session?.access_token,
           refresh_token: session?.refresh_token,
         }),
       });
-      if (!bridge.ok) throw new Error('Failed to set auth cookies');
-      const upsertRes = await fetch('/api/auth/upsert-user', {
-        method: 'POST',
+      if (!bridge.ok) throw new Error("Failed to set auth cookies");
+      const upsertRes = await fetch("/api/auth/upsert-user", {
+        method: "POST",
       });
       if (!upsertRes.ok) {
-        console.warn('upsert-user failed');
+        console.warn("upsert-user failed");
       }
       // 3) Fetch user role
-      const res = await fetch('/api/users/role', { cache: 'no-store' });
+      const res = await fetch("/api/users/role", { cache: "no-store" });
       const { role } = await res.json();
 
       // 4) Cache locally + toast
-      localStorage.setItem('user_email', email);
-      localStorage.setItem('user_role', role);
-      notify.success('Logged in successfully');
+      localStorage.setItem("user_email", email);
+      localStorage.setItem("user_role", role);
+      notify.success("Logged in successfully");
 
       // 5) Redirect based on role
       const target =
-        redirect && redirect !== '/login'
+        redirect && redirect !== "/login"
           ? redirect
-          : role === 'admin'
-          ? '/admin'
-          : role === 'staff'
-          ? '/staff'
-          : '/';
+          : role === "admin"
+          ? "/admin"
+          : role === "staff"
+          ? "/staff"
+          : "/";
       router.replace(target);
       return;
     } catch (err: any) {
       console.error(err);
-      notify.error(err.message || 'Invalid email or password');
-      setError(err.message || 'Invalid email or password');
+      notify.error(err.message || "Invalid email or password");
+      setError(err.message || "Invalid email or password");
     } finally {
       setIsLoading(false);
     }
@@ -99,10 +99,10 @@ function LoginInner() {
         <CardHeader className="space-y-2 text-center">
           <div className="mx-auto w-20 h-20 bg-primary rounded-2xl flex items-center justify-center mb-2 overflow-hidden">
             <Image
-              src="/apu-logo.png"
-              alt="APU Logo"
-              width={68}
-              height={68}
+              src="/icon-512x512.png"
+              alt="APU Sports"
+              width={100}
+              height={100}
               className="object-contain"
               priority
             />
@@ -156,7 +156,7 @@ function LoginInner() {
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 
@@ -175,13 +175,13 @@ function LoginInner() {
           <Alert className="mt-4 bg-muted border-primary/20">
             <InfoIcon className="h-4 w-4 text-primary" />
             <AlertDescription className="text-sm">
-              Having troubles? No worries! You can reach us at{' '}
+              Having troubles? No worries! You can reach us at{" "}
               <a
                 href="mailto:assist@staffemail.apu.edu.my"
                 className="text-primary font-medium hover:underline"
               >
                 assist@staffemail.apu.edu.my
-              </a>{' '}
+              </a>{" "}
               and our team will assist you.
             </AlertDescription>
           </Alert>

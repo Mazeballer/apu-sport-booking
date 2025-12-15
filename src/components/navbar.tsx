@@ -138,13 +138,13 @@ export function Navbar() {
             <Image
               src={
                 resolvedTheme === "dark"
-                  ? "/apu-logo-darkmode.png"
-                  : "/apu-logo.png"
+                  ? "/icon-512x512.png"
+                  : "/icon-512x512.png"
               }
-              alt="APU Logo"
-              width={120}
-              height={40}
-              className="h-8 w-auto md:h-10"
+              alt="APU Sports"
+              width={512}
+              height={512}
+              className="h-12 w-auto md:h-14"
               priority
             />
           ) : (

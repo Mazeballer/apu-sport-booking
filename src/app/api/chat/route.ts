@@ -16,7 +16,8 @@ import {
 } from "@/lib/ai/book-facility";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/authz";
-
+import { assertBookingLimit, BookingLimitError } from "@/lib/booking-limits";
+import { normalizeUserText } from "@/lib/ai/chat/normalize";
 import {
   getMalaysiaNow,
   getMalaysiaToday,
@@ -125,7 +126,8 @@ export async function POST(req: Request) {
 
     let dynamicContext: string | undefined;
 
-    const lastUserText = getLastUserText(uiMessages) ?? "";
+    const rawLastUserText = getLastUserText(uiMessages) ?? "";
+    const lastUserText = normalizeUserText(rawLastUserText);
 
     const current = await getCurrentUser();
     if (!current) {
@@ -357,6 +359,46 @@ Please say something like:
                 }
 
                 const result = await createBookingFromAI(suggestion);
+
+                // Convert suggestion date + time into a real Date in Malaysia (+08:00)
+                const startForLimit = new Date(
+                  `${suggestion.date}T${suggestion.suggestedTimeLabel}:00+08:00`
+                );
+
+                try {
+                  await assertBookingLimit({
+                    userId: current.id,
+                    start: startForLimit,
+                  });
+                } catch (e: any) {
+                  const msg =
+                    e instanceof BookingLimitError
+                      ? e.message
+                      : "Booking could not be created. Please try again.";
+
+                  dynamicContext = `
+Booking could not be created.
+
+System reason:
+${msg}
+
+In your reply:
+- Say the booking was not created.
+- Explain the limit briefly using the system reason above.
+- Ask the user to cancel an existing booking or pick another date/time.
+  `.trim();
+
+                  // Stop this confirm flow here
+                  const result = streamText({
+                    model: groq(
+                      process.env.GROQ_MODEL ?? "llama-3.1-8b-instant"
+                    ),
+                    system: buildSystemPrompt(dynamicContext),
+                    messages: convertToModelMessages(uiMessages),
+                    temperature: 0,
+                  });
+                  return result.toUIMessageStreamResponse();
+                }
 
                 if (!result.ok) {
                   const equipmentInlineFromFacility =

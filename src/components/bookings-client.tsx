@@ -87,23 +87,17 @@ export function BookingsClient({
   const now = new Date();
 
   // Upcoming = future bookings that are not cancelled
-  const upcomingBookings = bookings.filter((b) => {
-    const startDate = new Date(b.start);
-    return startDate >= now && b.status !== "cancelled";
-  });
+  const upcomingBookings = bookings
+    .filter((b) => b.status === "confirmed" || b.status === "rescheduled")
+    .filter((b) => new Date(b.end) > now)
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
   // History = completed or cancelled
   const MAX_HISTORY = 100;
 
   const allPast = bookings
-    .filter((b) => {
-      const startDate = new Date(b.start);
-      // show in history when booking is over or cancelled
-      return startDate < now || b.status === "cancelled";
-    })
-    .sort((a, b) => {
-      return new Date(b.start).getTime() - new Date(a.start).getTime();
-    });
+    .filter((b) => b.status === "cancelled" || new Date(b.end) <= now)
+    .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
 
   const pastBookings =
     allPast.length > MAX_HISTORY ? allPast.slice(0, MAX_HISTORY) : allPast;
