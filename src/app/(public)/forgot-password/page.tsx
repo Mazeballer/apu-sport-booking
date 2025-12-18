@@ -1,42 +1,46 @@
 // src/app/(public)/forgot-password/page.tsx
-'use client';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+"use client";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import Link from 'next/link';
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [ok, setOk] = useState(false);
-  const [err, setErr] = useState('');
+  const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErr('');
+    setErr("");
     setOk(false);
     setLoading(true);
     try {
       const supabase = createClient();
-      const origin = window.location.origin; // same origin that will receive the link
+
+      const site = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${origin}/reset-password`,
+        redirectTo: `${site}/reset-password`,
       });
+
       if (error) throw error;
+
       setOk(true);
     } catch (e: any) {
-      setErr(e?.message || 'Failed to send reset email');
+      setErr(e?.message || "Failed to send reset email");
     } finally {
       setLoading(false);
     }
@@ -102,7 +106,7 @@ export default function ForgotPasswordPage() {
                 </Alert>
               )}
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Sending...' : 'Send reset link'}
+                {loading ? "Sending..." : "Send reset link"}
               </Button>
             </form>
           )}
