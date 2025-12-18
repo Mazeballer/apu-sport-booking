@@ -23,7 +23,7 @@ export default async function EquipmentRequestsPage() {
     redirect("/login");
   }
 
-  const MAX_REQUESTS = 50;
+  const MAX_REQUESTS = 30;
 
   const dbRequests = await prisma.equipmentRequest.findMany({
     where: {
@@ -34,7 +34,7 @@ export default async function EquipmentRequestsPage() {
         status: { in: ["confirmed", "rescheduled"] },
       },
       // and only requests that still need action
-      status: { in: ["pending", "approved"] },
+      status: { in: ["pending", "approved", "denied", "done"] },
     },
     include: {
       booking: {
