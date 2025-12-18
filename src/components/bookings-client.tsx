@@ -183,6 +183,28 @@ export function BookingsClient({
 
     // Turning off
     if (!checked) {
+      try {
+        if ("serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+
+          if (sub) {
+            const endpoint = sub.endpoint;
+
+            await sub.unsubscribe();
+
+            await fetch("/api/push/subscribe", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint }),
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fully disable push", err);
+        // Even if cleanup fails, still update UI state
+      }
+
       setPushEnabled(false);
       window.localStorage.setItem("apu-push-enabled", "false");
       notify.warning("Booking notifications disabled");
@@ -253,10 +275,29 @@ export function BookingsClient({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("apu-push-enabled");
-    if (stored === "true") {
-      setPushEnabled(true);
-    }
+
+    (async () => {
+      try {
+        const stored = window.localStorage.getItem("apu-push-enabled");
+        if (stored !== "true") return;
+
+        if (!("serviceWorker" in navigator)) return;
+
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+
+        const hasPermission = Notification.permission === "granted";
+
+        if (hasPermission && sub) {
+          setPushEnabled(true);
+        } else {
+          setPushEnabled(false);
+          window.localStorage.setItem("apu-push-enabled", "false");
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
   }, []);
 
   return (

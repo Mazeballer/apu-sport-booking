@@ -1,34 +1,38 @@
 // src/app/(public)/reset-password/page.tsx
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { createClient } from '@/lib/supabase/client';
-import zxcvbn from 'zxcvbn';
-import { CheckCircle2 } from 'lucide-react';
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { createClient } from "@/lib/supabase/client";
+import zxcvbn from "zxcvbn";
+import { CheckCircle2 } from "lucide-react";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
   const [tokenReady, setTokenReady] = useState(false);
-  const [err, setErr] = useState('');
+  const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const ran = useRef(false);
 
-  const [pwd, setPwd] = useState('');
-  const [confirm, setConfirm] = useState('');
+  const [pwd, setPwd] = useState("");
+  const [confirm, setConfirm] = useState("");
 
   useEffect(() => {
+    if (ran.current) return;
+    ran.current = true;
+
     const run = async () => {
       const supabase = createClient();
 
@@ -40,26 +44,34 @@ export default function ResetPasswordPage() {
       }
 
       const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
+      const code = url.searchParams.get("code");
       if (!code) {
-        setErr('Missing code in the URL. Request a new link.');
+        setErr("Missing code in the URL. Request a new link.");
         return;
       }
 
-      // Try exchanging PKCE code
       const ex = await supabase.auth.exchangeCodeForSession(code);
+
       if (ex.error) {
-        console.error('exchangeCodeForSession error', ex.error);
+        // Strict Mode might have exchanged it already, recheck session
+        const again = await supabase.auth.getSession();
+        if (again.data.session) {
+          history.replaceState(null, "", window.location.pathname);
+          setTokenReady(true);
+          return;
+        }
+
+        console.error("exchangeCodeForSession error", ex.error);
         setErr(
-          'Invalid or expired reset link. Request a new one and open it in the same browser.'
+          "Invalid or expired reset link. Request a new one and open it in the same browser."
         );
         return;
       }
-      if (ex.data.session) {
-        history.replaceState(null, '', window.location.pathname);
-        setTokenReady(true);
-      }
+
+      history.replaceState(null, "", window.location.pathname);
+      setTokenReady(true);
     };
+
     run();
   }, []);
 
@@ -80,7 +92,7 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     if (!valid) return;
     setLoading(true);
-    setErr('');
+    setErr("");
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password: pwd });
@@ -88,9 +100,9 @@ export default function ResetPasswordPage() {
 
       await supabase.auth.signOut(); // end the one time recovery session
       setDone(true);
-      setTimeout(() => router.replace('/login'), 1200);
+      setTimeout(() => router.replace("/login"), 1200);
     } catch (e: any) {
-      setErr(e?.message || 'Failed to update password');
+      setErr(e?.message || "Failed to update password");
     } finally {
       setLoading(false);
     }
@@ -121,7 +133,7 @@ export default function ResetPasswordPage() {
         <CardContent>
           {!tokenReady && !done ? (
             <Alert variant="destructive">
-              <AlertDescription>{err || 'Checking link...'}</AlertDescription>
+              <AlertDescription>{err || "Checking link..."}</AlertDescription>
             </Alert>
           ) : done ? (
             <Alert className="bg-green-200 dark:bg-green-950 border-green-600 dark:border-green-800">
@@ -147,10 +159,10 @@ export default function ResetPasswordPage() {
                   <div
                     className={`h-1.5 ${
                       zx.score >= 3
-                        ? 'bg-green-500'
+                        ? "bg-green-500"
                         : zx.score === 2
-                        ? 'bg-orange-500'
-                        : 'bg-red-500'
+                        ? "bg-orange-500"
+                        : "bg-red-500"
                     }`}
                     style={{ width: `${((zx.score + 1) / 5) * 100}%` }}
                   />
@@ -183,7 +195,7 @@ export default function ResetPasswordPage() {
                 className="w-full"
                 disabled={!valid || loading}
               >
-                {loading ? 'Updating...' : 'Reset password'}
+                {loading ? "Updating..." : "Reset password"}
               </Button>
             </form>
           )}

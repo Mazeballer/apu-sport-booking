@@ -37,3 +37,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const endpoint = body?.endpoint as string | undefined;
+
+    if (!endpoint) {
+      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    }
+
+    await prisma.pushSubscription.deleteMany({
+      where: {
+        userId: user.id,
+        endpoint,
+      },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Error deleting push subscription", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
