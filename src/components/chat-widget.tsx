@@ -40,6 +40,7 @@ export function ChatWidget() {
   });
 
   const isLoading = status !== "ready";
+  const isOnline = status !== "error";
 
   useEffect(() => {
     if (!bottomRef.current) return;
@@ -93,17 +94,21 @@ export function ChatWidget() {
     e.preventDefault();
     const value = inputValue.trim();
     if (!value) return;
+    if (!isOnline || isLoading) return;
+
     sendMessage({ text: value });
     setInputValue("");
   };
 
   const handleSuggestionClick = (question: string) => {
-    if (isLoading) return;
+    if (isLoading || !isOnline) return;
     sendMessage({ text: question });
   };
 
   const toggleRecording = () => {
     if (!speechSupported || !recognitionRef.current) return;
+    if (!isOnline || isLoading) return;
+
     if (isRecording) {
       recognitionRef.current.stop();
       return;
@@ -211,9 +216,13 @@ export function ChatWidget() {
                 <h3 className="font-bold text-white text-lg tracking-wide">
                   Assistant
                 </h3>
-                <p className="text-xs text-white/90 flex items-center gap-1 font-medium">
-                  <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse border border-white/50" />
-                  Always Active
+                <p className="text-xs flex items-center gap-1 font-medium text-white">
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full border border-white/50 ${
+                      isOnline ? "bg-green-400 animate-pulse" : "bg-red-500"
+                    }`}
+                  />
+                  {isOnline ? "Active" : "Offline"}
                 </p>
               </div>
             </div>
@@ -241,6 +250,13 @@ export function ChatWidget() {
             </div>
           </div>
 
+          {/* Offline banner */}
+          {!isOnline && (
+            <div className="px-4 py-2 text-xs text-red-700 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/30">
+              Assistant is offline right now. Please try again later.
+            </div>
+          )}
+
           {/* Messages */}
           <ScrollArea className="flex-1 min-h-0 bg-gray-50/50 dark:bg-[#0f1419]">
             <div className="p-4 space-y-6">
@@ -264,7 +280,8 @@ export function ChatWidget() {
                         key={q}
                         type="button"
                         onClick={() => handleSuggestionClick(q)}
-                        className="text-xs px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-gray-700 transition shadow-sm"
+                        disabled={!isOnline || isLoading}
+                        className="text-xs px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-gray-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {q}
                       </button>
@@ -387,7 +404,8 @@ export function ChatWidget() {
                   <button
                     key={q}
                     onClick={() => handleSuggestionClick(q)}
-                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition font-medium whitespace-nowrap"
+                    disabled={!isOnline || isLoading}
+                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {q}
                   </button>
@@ -405,8 +423,10 @@ export function ChatWidget() {
               <div className="relative flex-1">
                 <Input
                   name="chat-message"
-                  placeholder="Type a message..."
-                  disabled={isLoading}
+                  placeholder={
+                    isOnline ? "Type a message..." : "Assistant is offline"
+                  }
+                  disabled={isLoading || !isOnline}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   className="w-full bg-gray-100/50 dark:bg-[#161b22] border-0 focus:ring-2 focus:ring-blue-500/20 text-gray-900 dark:text-white placeholder:text-gray-400 rounded-full px-4 h-11"
@@ -417,13 +437,13 @@ export function ChatWidget() {
                 type="button"
                 size="icon"
                 variant="ghost"
-                disabled={!speechSupported || isLoading}
+                disabled={!speechSupported || isLoading || !isOnline}
                 onClick={toggleRecording}
                 className={`h-11 w-11 rounded-full transition-all ${
                   isRecording
                     ? "bg-red-50 text-red-500 hover:bg-red-100"
                     : "bg-gray-100/50 text-gray-500 hover:bg-gray-100"
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isRecording ? (
                   <MicOff className="h-5 w-5 animate-pulse" />
@@ -435,9 +455,9 @@ export function ChatWidget() {
               <Button
                 type="submit"
                 size="icon"
-                disabled={isLoading}
+                disabled={isLoading || !isOnline}
                 style={GRADIENT_STYLE}
-                className="text-white h-11 w-11 rounded-full shadow-lg transition-all hover:scale-105 hover:brightness-110 border-0 flex-shrink-0"
+                className="text-white h-11 w-11 rounded-full shadow-lg transition-all hover:scale-105 hover:brightness-110 border-0 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send className="h-4 w-4 rotate-45 mr-1" />
               </Button>

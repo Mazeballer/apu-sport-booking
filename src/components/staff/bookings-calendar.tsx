@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarIcon, ClockIcon, MapPinIcon, SearchIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -33,8 +33,8 @@ export type CalendarBooking = {
   userEmail: string;
   facilityName: string;
   facilityLocation: string;
-  start: string; // ISO string
-  end: string; // ISO string
+  start: string;
+  end: string;
   equipment: EquipmentItem[];
 };
 
@@ -42,14 +42,17 @@ type BookingsCalendarProps = {
   bookings: CalendarBooking[];
 };
 
+const PAGE_SIZE = 20;
+
 export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [filterMode, setFilterMode] = useState<"all" | "today" | "custom">(
     "all"
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
 
-  // Decorate bookings with date, startTime, duration for display and filtering
+  // Decorate bookings with date, startTime, duration
   const confirmedBookings = bookings
     .map((b) => {
       const startDate = new Date(b.start);
@@ -70,36 +73,47 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const filteredBookings = confirmedBookings.filter((booking) => {
-    // Date filter
     let dateMatch = true;
+
     if (filterMode === "today") {
       const today = new Date();
-      const bookingDate = new Date(booking.date);
+      const d = new Date(booking.date);
       dateMatch =
-        bookingDate.getDate() === today.getDate() &&
-        bookingDate.getMonth() === today.getMonth() &&
-        bookingDate.getFullYear() === today.getFullYear();
+        d.getDate() === today.getDate() &&
+        d.getMonth() === today.getMonth() &&
+        d.getFullYear() === today.getFullYear();
     } else if (filterMode === "custom" && selectedDate) {
-      const bookingDate = new Date(booking.date);
+      const d = new Date(booking.date);
       dateMatch =
-        bookingDate.getDate() === selectedDate.getDate() &&
-        bookingDate.getMonth() === selectedDate.getMonth() &&
-        bookingDate.getFullYear() === selectedDate.getFullYear();
+        d.getDate() === selectedDate.getDate() &&
+        d.getMonth() === selectedDate.getMonth() &&
+        d.getFullYear() === selectedDate.getFullYear();
     }
 
-    // Search filter
     let searchMatch = true;
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase();
       searchMatch =
-        booking.facilityName.toLowerCase().includes(query) ||
-        booking.facilityLocation.toLowerCase().includes(query) ||
-        booking.userEmail.toLowerCase().includes(query) ||
-        booking.equipment.some((eq) => eq.name.toLowerCase().includes(query));
+        booking.facilityName.toLowerCase().includes(q) ||
+        booking.facilityLocation.toLowerCase().includes(q) ||
+        booking.userEmail.toLowerCase().includes(q) ||
+        booking.equipment.some((e) => e.name.toLowerCase().includes(q));
     }
 
     return dateMatch && searchMatch;
   });
+
+  const totalPages = Math.ceil(filteredBookings.length / PAGE_SIZE);
+
+  const paginatedBookings = filteredBookings.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE
+  );
+
+  // Reset page when filters/search change
+  useEffect(() => {
+    setPage(1);
+  }, [filterMode, selectedDate, searchQuery]);
 
   const handleTodayFilter = () => {
     setFilterMode("today");
@@ -113,9 +127,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
 
   const handleCustomDate = (date: Date | undefined) => {
     setSelectedDate(date);
-    if (date) {
-      setFilterMode("custom");
-    }
+    if (date) setFilterMode("custom");
   };
 
   if (confirmedBookings.length === 0) {
@@ -136,7 +148,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
     <div className="space-y-4">
       {/* Search Bar */}
       <div className="relative">
-        <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search by facility, location, student email, or equipment..."
           value={searchQuery}
@@ -145,7 +157,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
         />
       </div>
 
-      {/* Filter Buttons */}
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant={filterMode === "all" ? "default" : "outline"}
@@ -155,6 +167,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
         >
           All Bookings
         </Button>
+
         <Button
           variant={filterMode === "today" ? "default" : "outline"}
           size="sm"
@@ -163,6 +176,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
         >
           Today
         </Button>
+
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -185,6 +199,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
             />
           </PopoverContent>
         </Popover>
+
         {(filterMode !== "all" || searchQuery.trim()) && (
           <Badge variant="secondary" className="ml-2">
             {filteredBookings.length} booking
@@ -206,20 +221,10 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
               ? "There are no bookings scheduled for today"
               : "There are no bookings for the selected date"}
           </p>
-          {searchQuery.trim() && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSearchQuery("")}
-              className="mt-4 transition-all duration-200 hover:scale-105 active:scale-95"
-            >
-              Clear search
-            </Button>
-          )}
         </div>
       ) : (
         <>
-          {/* Desktop Table View */}
+          {/* Desktop Table */}
           <div className="hidden md:block">
             <Table>
               <TableHeader>
@@ -233,18 +238,13 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredBookings.map((booking) => (
-                  <TableRow
-                    key={booking.id}
-                    className="transition-colors duration-200"
-                  >
+                {paginatedBookings.map((booking) => (
+                  <TableRow key={booking.id}>
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{booking.facilityName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {booking.facilityLocation}
-                        </p>
-                      </div>
+                      <p className="font-medium">{booking.facilityName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {booking.facilityLocation}
+                      </p>
                     </TableCell>
                     <TableCell>{booking.userEmail}</TableCell>
                     <TableCell>
@@ -260,25 +260,16 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className="bg-primary/10 text-primary border-primary/20"
-                      >
+                      <Badge className="bg-primary/10 text-primary border-primary/20">
                         {booking.duration}h
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      {booking.equipment.length > 0 ? (
-                        <div className="text-sm">
-                          {booking.equipment
+                    <TableCell className="text-sm">
+                      {booking.equipment.length > 0
+                        ? booking.equipment
                             .map((e) => `${e.name} (${e.qty})`)
-                            .join(", ")}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">
-                          None
-                        </span>
-                      )}
+                            .join(", ")
+                        : "None"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -286,9 +277,9 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
             </Table>
           </div>
 
-          {/* Mobile Card View */}
+          {/* Mobile Cards */}
           <div className="md:hidden space-y-4">
-            {filteredBookings.map((booking) => (
+            {paginatedBookings.map((booking) => (
               <Card
                 key={booking.id}
                 className="p-4 transition-all duration-200 hover:shadow-lg"
@@ -299,7 +290,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
                       {booking.facilityName}
                     </h3>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPinIcon className="h-4 w-4" />
+                      <MapPinIcon className="h-4 w-4 text-primary" />
                       {booking.facilityLocation}
                     </div>
                   </div>
@@ -323,10 +314,7 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Duration</span>
-                      <Badge
-                        variant="secondary"
-                        className="bg-primary/10 text-primary border-primary/20"
-                      >
+                      <Badge className="bg-primary/10 text-primary border-primary/20">
                         {booking.duration}h
                       </Badge>
                     </div>
@@ -345,6 +333,36 @@ export function BookingsCalendar({ bookings }: BookingsCalendarProps) {
               </Card>
             ))}
           </div>
+
+          {/* Pagination */}
+          {filteredBookings.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between pt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {(page - 1) * PAGE_SIZE + 1}–
+                {Math.min(page * PAGE_SIZE, filteredBookings.length)} of{" "}
+                {filteredBookings.length}
+              </p>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

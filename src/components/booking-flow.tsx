@@ -172,10 +172,11 @@ export function BookingFlow({
     const currentHour = new Date().getHours();
     const isToday = selectedDate.toDateString() === new Date().toDateString();
 
-    const status: Record<string, "available" | "unavailable" | "elapsed"> = {};
+    const status: Record<string, "available" | "unavailable"> = {};
+
     facility.courts.forEach((c) => {
       if (isToday && slotStart.getHours() < currentHour) {
-        status[c.id] = "elapsed";
+        status[c.id] = "unavailable";
         return;
       }
       const clash = dayBookings.some(
@@ -200,10 +201,7 @@ export function BookingFlow({
     const effectiveDuration = selectedDuration ?? 1;
 
     return facility.courts.map((court) => {
-      const availability: Record<
-        string,
-        "available" | "unavailable" | "elapsed"
-      > = {};
+      const availability: Record<string, "available" | "unavailable"> = {};
       const now = new Date();
       const isToday = selectedDate.toDateString() === now.toDateString();
       const nowHour = now.getHours();
@@ -212,14 +210,15 @@ export function BookingFlow({
         const start = buildDateAtTime(selectedDate, slot);
         const end = addHours(start, effectiveDuration);
 
+        const clash = dayBookings.some(
+          (b) =>
+            b.courtId === court.id &&
+            overlaps(start, end, new Date(b.start), new Date(b.end))
+        );
+
         if (isToday && start.getHours() < nowHour) {
-          availability[slot] = "elapsed";
+          availability[slot] = "unavailable";
         } else {
-          const clash = dayBookings.some(
-            (b) =>
-              b.courtId === court.id &&
-              overlaps(start, end, new Date(b.start), new Date(b.end))
-          );
           availability[slot] = clash ? "unavailable" : "available";
         }
       });
@@ -577,7 +576,7 @@ export function BookingFlow({
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
                 {facility.courts.map((court) => {
                   const status =
-                    courtStatusForSelectedTime[court.id] ?? "elapsed";
+                    courtStatusForSelectedTime[court.id] ?? "unavailable";
                   const isAvailable = status === "available";
                   return (
                     <div
@@ -601,11 +600,7 @@ export function BookingFlow({
                           variant={isAvailable ? "default" : "secondary"}
                           className="text-xs"
                         >
-                          {status === "elapsed"
-                            ? "Elapsed"
-                            : isAvailable
-                            ? "Available"
-                            : "Booked"}
+                          {isAvailable ? "Available" : "Unavailable"}
                         </Badge>
                       </div>
                     </div>
@@ -811,10 +806,6 @@ export function BookingFlow({
                 <div className="w-3 h-3 md:w-4 md:h-4 bg-primary rounded" />
                 <span>Unavailable</span>
               </div>
-              <div className="flex items-center gap-1.5 md:gap-2">
-                <div className="w-3 h-3 md:w-4 md:h-4 bg-muted rounded" />
-                <span>Elapsed</span>
-              </div>
             </div>
 
             <div className="border rounded-lg overflow-hidden">
@@ -850,8 +841,6 @@ export function BookingFlow({
                             className={`w-16 md:w-24 h-10 md:h-14 flex-shrink-0 border-r last:border-r-0 transition-all duration-200 ${
                               status === "unavailable"
                                 ? "bg-primary"
-                                : status === "elapsed"
-                                ? "bg-muted"
                                 : "bg-background hover:bg-accent/50 cursor-pointer hover:scale-105"
                             }`}
                           />

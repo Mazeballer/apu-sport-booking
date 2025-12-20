@@ -1,23 +1,23 @@
 // src/lib/ai/chat/typos.ts
 
 export type ReplacementRule = {
-  // Whole word or phrase to match (normalized input).
+  // Whole word or phrase to match (already normalized input).
   from: string;
   // Replacement string (also normalized style).
   to: string;
 };
 
 /**
- * Normalize user text so intent detection and facility matching are stable.
- * This is NOT AI. It just standardises input.
+ * Base normalizer to stabilize user input for intent detection and matching.
+ * This is NOT AI, it is deterministic text cleanup.
  */
-export function normalizeUserText(input: string): string {
+function baseNormalizeText(input: string): string {
   if (!input) return "";
 
   // 1) Lowercase and Unicode normalize (helps with weird characters)
   let s = input.toLowerCase().normalize("NFKD");
 
-  // 2) Remove diacritics (rare in your case but harmless)
+  // 2) Remove diacritics
   s = s.replace(/[\u0300-\u036f]/g, "");
 
   // 3) Replace common separators with spaces
@@ -32,10 +32,14 @@ export function normalizeUserText(input: string): string {
   return s;
 }
 
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * Applies phrase replacements in a safe order:
  * - Longer phrases first, so "basket ball" is fixed before "ball".
- * - Whole word boundaries where possible.
+ * - Boundary-ish matching to reduce partial word issues.
  */
 export function applyReplacements(
   normalizedText: string,
@@ -46,11 +50,11 @@ export function applyReplacements(
   const sorted = [...rules].sort((a, b) => b.from.length - a.from.length);
 
   for (const r of sorted) {
-    if (!r.from.trim()) continue;
+    const from = r.from.trim();
+    if (!from) continue;
 
     // Replace as whole phrase with boundary-ish matching.
-    // We wrap with spaces to avoid partial word issues.
-    const pattern = new RegExp(`(^|\\s)${escapeRegExp(r.from)}(?=\\s|$)`, "g");
+    const pattern = new RegExp(`(^|\\s)${escapeRegExp(from)}(?=\\s|$)`, "g");
     text = text.replace(pattern, `$1${r.to}`);
   }
 
@@ -59,22 +63,12 @@ export function applyReplacements(
   return text;
 }
 
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
- * Your central replacement rules.
- * Keep these “meaningful” words only: sports, intents, confirm/cancel, duration.
- *
- * IMPORTANT:
- * - Do NOT add random English typos for every word.
- * - Only add typos that affect routing, booking, or equipment decisions.
+ * Central replacement rules.
+ * Keep this focused on booking/equipment terms that affect routing and matching.
  */
 export const BOOKING_TYPO_RULES: ReplacementRule[] = [
-  // ------------------------
   // Booking intent and actions
-  // ------------------------
   { from: "bok", to: "book" },
   { from: "boook", to: "book" },
   { from: "bookk", to: "book" },
@@ -83,6 +77,7 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "reserve", to: "book" },
   { from: "reservation", to: "book" },
   { from: "reserver", to: "book" },
+
   { from: "sched", to: "schedule" },
   { from: "schedual", to: "schedule" },
   { from: "scheduel", to: "schedule" },
@@ -91,14 +86,15 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "make booking", to: "book" },
   { from: "help me book", to: "book" },
 
+  // Availability wording
   { from: "availablity", to: "availability" },
   { from: "avalibility", to: "availability" },
   { from: "available", to: "availability" },
   { from: "free slot", to: "availability" },
-  { from: "slot", to: "availability" },
   { from: "time slot", to: "availability" },
+  { from: "slot", to: "availability" },
 
-  // confirm/cancel signals
+  // Confirm and cancel signals
   { from: "confim", to: "confirm" },
   { from: "confrim", to: "confirm" },
   { from: "cnfrm", to: "confirm" },
@@ -114,9 +110,7 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "do not book", to: "cancel" },
   { from: "no book", to: "cancel" },
 
-  // ------------------------
   // Durations (1h / 2h)
-  // ------------------------
   { from: "1hour", to: "1 hour" },
   { from: "onehour", to: "1 hour" },
   { from: "1 hr", to: "1 hour" },
@@ -131,9 +125,7 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "two hr", to: "2 hours" },
   { from: "two hours", to: "2 hours" },
 
-  // ------------------------
-  // Common “today/tomorrow” typos
-  // ------------------------
+  // Today / tomorrow typos
   { from: "tmr", to: "tomorrow" },
   { from: "tmrw", to: "tomorrow" },
   { from: "tommorow", to: "tomorrow" },
@@ -144,13 +136,10 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "tody", to: "today" },
   { from: "toady", to: "today" },
 
-  // ------------------------
   // Sports / facilities (generic)
-  // Add your real facility names too if students type them often
-  // ------------------------
   { from: "tenis", to: "tennis" },
-  { from: "tennis court", to: "tennis" },
   { from: "tnnis", to: "tennis" },
+  { from: "tennis court", to: "tennis" },
 
   { from: "badminto", to: "badminton" },
   { from: "badmintion", to: "badminton" },
@@ -169,10 +158,7 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "soccer", to: "football" },
   { from: "football field", to: "football" },
 
-  // ------------------------
-  // Equipment related words (optional)
-  // These help your “no equipment” detection
-  // ------------------------
+  // Equipment related words
   { from: "eq", to: "equipment" },
   { from: "equip", to: "equipment" },
   { from: "equiment", to: "equipment" },
@@ -183,14 +169,16 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "no equipments", to: "no equipment" },
   { from: "dont need equipment", to: "no equipment" },
   { from: "do not need equipment", to: "no equipment" },
-  { from: "none", to: "no equipment" }, // careful: only safe because your chat domain is booking
+
+  // Caution: only safe if your chat domain is strictly booking.
+  { from: "none", to: "no equipment" },
 ];
 
 /**
- * Convenience helper that does both steps:
- * normalize, then replace.
+ * Convenience helper used by normalize.ts
+ * Base normalize, then apply booking typo rules.
  */
 export function normalizeForBookingChat(input: string) {
-  const normalized = normalizeUserText(input);
+  const normalized = baseNormalizeText(input);
   return applyReplacements(normalized, BOOKING_TYPO_RULES);
 }

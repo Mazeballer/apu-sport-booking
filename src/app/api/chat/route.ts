@@ -358,8 +358,6 @@ Please say something like:
                   }
                 }
 
-                const result = await createBookingFromAI(suggestion);
-
                 // Convert suggestion date + time into a real Date in Malaysia (+08:00)
                 const startForLimit = new Date(
                   `${suggestion.date}T${suggestion.suggestedTimeLabel}:00+08:00`
@@ -388,7 +386,6 @@ In your reply:
 - Ask the user to cancel an existing booking or pick another date/time.
   `.trim();
 
-                  // Stop this confirm flow here
                   const result = streamText({
                     model: groq(
                       process.env.GROQ_MODEL ?? "llama-3.1-8b-instant"
@@ -397,8 +394,12 @@ In your reply:
                     messages: convertToModelMessages(uiMessages),
                     temperature: 0,
                   });
+
                   return result.toUIMessageStreamResponse();
                 }
+
+                // Only create booking AFTER passing the limit check
+                const result = await createBookingFromAI(suggestion);
 
                 if (!result.ok) {
                   const equipmentInlineFromFacility =
@@ -797,7 +798,7 @@ Please say something like:
               hasEquipmentDecision = true;
             } else {
               const deniesEquipment =
-                /\b(no equipment|no need equipment|do not need equipment|dont need equipment|no\b|none\b|nothing\b)\b/i.test(
+                /\b(no equipment|no need equipment|do not need equipment|dont need equipment|none\b|nothing\b)\b/i.test(
                   qLower
                 );
 
@@ -934,7 +935,7 @@ In your reply:
 
       if (guess) {
         dynamicContext = `
-The last user message was: "${lastUserText}".
+The last user message was: "${rawLastUserText}".
 
 The system has a fuzzy guess that the user might be talking about the facility "${guess.name}", but this is NOT certain.
 
@@ -951,7 +952,7 @@ In your reply:
         `.trim();
       } else {
         dynamicContext = `
-The last user message was: "${lastUserText}".
+The last user message was: "${rawLastUserText}".
 
 The system could not confidently detect any:
 - specific facility name, or
