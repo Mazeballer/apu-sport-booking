@@ -97,7 +97,7 @@ function LoginInner() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto w-20 h-20 bg-primary rounded-2xl flex items-center justify-center mb-2 overflow-hidden">
+          <div className="mx-auto w-20 h-20">
             <Image
               src="/icon-512x512.png"
               alt="APU Sports"
@@ -159,18 +159,6 @@ function LoginInner() {
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
-
-          <Alert className="mt-6 bg-primary/10 border-primary/20">
-            <InfoIcon className="h-4 w-4 text-primary" />
-            <AlertDescription className="text-sm">
-              <div className="font-semibold mb-2">Test Accounts:</div>
-              <div className="space-y-1 font-mono text-xs">
-                <div>User: user@mail.apu.edu.my / user123</div>
-                <div>Staff: staff@mail.apu.edu.my / staff123</div>
-                <div>Admin: admin@mail.apu.edu.my / admin123</div>
-              </div>
-            </AlertDescription>
-          </Alert>
 
           <Alert className="mt-4 bg-muted border-primary/20">
             <InfoIcon className="h-4 w-4 text-primary" />

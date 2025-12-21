@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -17,8 +17,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,11 +28,11 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { PlusIcon, SearchIcon, TrashIcon, AlertCircleIcon } from 'lucide-react';
-import { notify } from '@/lib/toast';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { Card, CardContent } from '@/components/ui/card';
+} from "@/components/ui/alert-dialog";
+import { PlusIcon, SearchIcon, TrashIcon, AlertCircleIcon } from "lucide-react";
+import { notify } from "@/lib/toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Card, CardContent } from "@/components/ui/card";
 
 /** Debounce helper (fires after typing stops) */
 function useDebounce<T>(value: T, delay = 450) {
@@ -44,7 +44,7 @@ function useDebounce<T>(value: T, delay = 450) {
   return debounced;
 }
 
-type Role = 'student' | 'staff' | 'admin';
+type Role = "student" | "staff" | "admin";
 type UserRow = {
   id: string;
   name: string;
@@ -59,16 +59,19 @@ type UserManagementProps = {
   initialQuery?: string;
   initialPage?: number;
   pageSize?: number;
+  currentUserId: string;
 };
 
 export function UserManagement({
   initialUsers = [],
   initialTotal = 0,
-  initialQuery = '',
+  initialQuery = "",
   initialPage = 1,
   pageSize = 20,
+  currentUserId,
 }: UserManagementProps) {
   const isMobile = useIsMobile();
+  const isSelf = (userId: string) => userId === currentUserId;
 
   // list + paging
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
@@ -89,10 +92,10 @@ export function UserManagement({
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [newUser, setNewUser] = useState({
-    email: '',
-    password: '',
-    name: '',
-    role: 'student' as Role,
+    email: "",
+    password: "",
+    name: "",
+    role: "student" as Role,
   });
 
   // Fetch users (debounced + refreshKey after mutations)
@@ -107,11 +110,11 @@ export function UserManagement({
           { signal: controller.signal }
         );
         const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Failed to fetch users');
+        if (!res.ok) throw new Error(json.error || "Failed to fetch users");
         setUsers(json.users || []);
         setTotal(json.total || 0);
       } catch (e: any) {
-        if (e.name !== 'AbortError') {
+        if (e.name !== "AbortError") {
           notify.error(`Failed to load users: ${e.message}`);
         }
       }
@@ -139,38 +142,38 @@ export function UserManagement({
   const handleAddUser = async () => {
     // Required fields
     if (!newUser.email || !newUser.password || !newUser.name) {
-      notify.error('Please fill in all required fields.');
+      notify.error("Please fill in all required fields.");
       return;
     }
     // Password rule
     if (newUser.password.length < 8) {
-      notify.warning('Password must be at least 8 characters long.');
+      notify.warning("Password must be at least 8 characters long.");
       return;
     }
     // Basic email check
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) {
-      notify.warning('Please enter a valid email address.');
+      notify.warning("Please enter a valid email address.");
       return;
     }
 
     try {
       setCreating(true);
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newUser),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to create user');
+      if (!res.ok) throw new Error(json.error || "Failed to create user");
 
       // refresh list
       setShowAddForm(false);
-      setNewUser({ email: '', password: '', name: '', role: 'student' });
+      setNewUser({ email: "", password: "", name: "", role: "student" });
       setPage(1);
-      setSearchQuery('');
+      setSearchQuery("");
       setRefreshKey((k) => k + 1);
 
-      notify.success('User created successfully!');
+      notify.success("User created successfully!");
     } catch (e: any) {
       notify.error(`Failed to create user: ${e.message}`);
     } finally {
@@ -179,16 +182,21 @@ export function UserManagement({
   };
 
   const handleRoleSelect = (userId: string, newRole: Role) => {
+    if (isSelf(userId)) {
+      notify.warning("You cannot change your own role.");
+      return;
+    }
+
     const original = users.find((u) => u.id === userId)?.role;
 
     setPendingRoleChanges((prev) => {
-      if (!original) return prev; // user not found, ignore
+      if (!original) return prev;
 
       const next = { ...prev };
       if (newRole === original) {
-        delete next[userId]; // back to original → remove pending change
+        delete next[userId];
       } else {
-        next[userId] = newRole; // track changed value
+        next[userId] = newRole;
       }
       return next;
     });
@@ -196,20 +204,22 @@ export function UserManagement({
 
   const handleConfirmRoleChanges = () => {
     if (Object.keys(pendingRoleChanges).length === 0) {
-      notify.info('Nothing to update.');
+      notify.info("Nothing to update.");
       return;
     }
     setShowRoleChangeConfirm(true);
   };
 
   const applyRoleChanges = async () => {
-    const entries = Object.entries(pendingRoleChanges).filter(([id, role]) => {
-      const original = users.find((u) => u.id === id)?.role;
-      return original && original !== role;
-    });
+    const entries = Object.entries(pendingRoleChanges)
+      .filter(([id]) => !isSelf(id))
+      .filter(([id, role]) => {
+        const original = users.find((u) => u.id === id)?.role;
+        return original && original !== role;
+      });
 
     if (entries.length === 0) {
-      notify.info('Nothing to update.');
+      notify.info("Nothing to update.");
       return;
     }
 
@@ -226,13 +236,13 @@ export function UserManagement({
       await Promise.all(
         entries.map(async ([id, role]) => {
           const res = await fetch(`/api/admin/users/${id}/role`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ role }),
           });
           if (!res.ok) {
             const json = await res.json().catch(() => ({}));
-            throw new Error(json.error || 'Failed to update role');
+            throw new Error(json.error || "Failed to update role");
           }
         })
       );
@@ -241,28 +251,33 @@ export function UserManagement({
       setRefreshKey((k) => k + 1);
     } catch (e: any) {
       setUsers(prevUsers); // rollback
-      notify.error(e.message || 'Update failed');
+      notify.error(e.message || "Update failed");
     }
   };
 
   const handleCancelRoleChanges = () => {
     setPendingRoleChanges({});
-    notify.info('Role changes discarded.');
+    notify.info("Role changes discarded.");
   };
 
   const handleDeleteUser = async (userId: string) => {
+    if (isSelf(userId)) {
+      notify.warning("You cannot delete your own account.");
+      return;
+    }
+
     const prev = users;
     setUsers(users.filter((u) => u.id !== userId)); // optimistic
     setUserToDelete(null);
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to delete user');
+      if (!res.ok) throw new Error(json.error || "Failed to delete user");
 
       setRefreshKey((k) => k + 1);
-      notify.success('User deleted successfully');
+      notify.success("User deleted successfully");
     } catch (e: any) {
       setUsers(prev); // rollback
       notify.error(`Failed to delete user: ${e.message}`);
@@ -270,30 +285,30 @@ export function UserManagement({
   };
 
   const getRoleBadgeVariant = (role: string) =>
-    role === 'admin'
-      ? 'destructive'
-      : role === 'staff'
-      ? 'default'
-      : 'secondary';
+    role === "admin"
+      ? "destructive"
+      : role === "staff"
+      ? "default"
+      : "secondary";
 
   const getRoleBadgeClassName = (role: string) =>
-    role === 'student'
-      ? 'bg-green-200 text-green-950 hover:bg-green-200 dark:bg-green-900 dark:text-green-50 border-green-300 dark:border-green-800'
-      : '';
+    role === "student"
+      ? "bg-green-200 text-green-950 hover:bg-green-200 dark:bg-green-900 dark:text-green-50 border-green-300 dark:border-green-800"
+      : "";
 
   const hasPendingChanges = Object.keys(pendingRoleChanges).length > 0;
 
   const pendingList = useMemo(
     () =>
       users
-        .filter((u) => pendingRoleChanges[u.id])
+        .filter((u) => pendingRoleChanges[u.id] && !isSelf(u.id))
         .map((u) => ({
           name: u.name,
           email: u.email,
           currentRole: u.role,
           newRole: pendingRoleChanges[u.id]!,
         })),
-    [users, pendingRoleChanges]
+    [users, pendingRoleChanges, currentUserId]
   );
 
   const showingCount = Math.min(
@@ -418,7 +433,7 @@ export function UserManagement({
               Cancel
             </Button>
             <Button onClick={handleAddUser} disabled={creating}>
-              {creating ? 'Creating...' : 'Create User'}
+              {creating ? "Creating..." : "Create User"}
             </Button>
           </div>
         </div>
@@ -431,8 +446,8 @@ export function UserManagement({
           <div className="flex-1">
             <h4 className="font-semibold">Pending Role Changes</h4>
             <p className="text-sm">
-              You have {Object.keys(pendingRoleChanges).length} pending
-              change(s). Click “Confirm Changes” to apply.
+              You have {pendingList.length} pending change(s). Click “Confirm
+              Changes” to apply.
             </p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
@@ -472,8 +487,8 @@ export function UserManagement({
                   key={user.id}
                   className={
                     hasPendingChange
-                      ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/10'
-                      : ''
+                      ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/10"
+                      : ""
                   }
                 >
                   <CardContent className="p-4 space-y-4">
@@ -484,7 +499,7 @@ export function UserManagement({
                           {user.email}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Created:{' '}
+                          Created:{" "}
                           {new Date(user.createdAt).toLocaleDateString()}
                         </p>
                       </div>
@@ -498,6 +513,7 @@ export function UserManagement({
                         onValueChange={(v: Role) =>
                           handleRoleSelect(user.id, v)
                         }
+                        disabled={isSelf(user.id)}
                       >
                         <SelectTrigger className="w-full mt-1 border-3 border-primary/20 focus:border-primary shadow-sm">
                           <Badge
@@ -507,7 +523,7 @@ export function UserManagement({
                             )}`}
                           >
                             {displayRole}
-                            {hasPendingChange && ' *'}
+                            {hasPendingChange && " *"}
                           </Badge>
                         </SelectTrigger>
                         <SelectContent className="border-2">
@@ -536,6 +552,7 @@ export function UserManagement({
                       variant="outline"
                       size="sm"
                       onClick={() => setUserToDelete(user)}
+                      disabled={isSelf(user.id)}
                       className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/20"
                     >
                       <TrashIcon className="h-4 w-4 mr-2" /> Delete User
@@ -577,8 +594,8 @@ export function UserManagement({
                       key={user.id}
                       className={`hover:bg-muted/50 transition-colors ${
                         hasPendingChange
-                          ? 'bg-amber-50/50 dark:bg-amber-950/10 border-l-4 border-l-amber-500'
-                          : ''
+                          ? "bg-amber-50/50 dark:bg-amber-950/10 border-l-4 border-l-amber-500"
+                          : ""
                       }`}
                     >
                       <TableCell className="font-semibold">
@@ -593,6 +610,7 @@ export function UserManagement({
                           onValueChange={(v: Role) =>
                             handleRoleSelect(user.id, v)
                           }
+                          disabled={isSelf(user.id)}
                         >
                           <SelectTrigger className="w-[160px] border-3 border-primary/20 focus:border-primary shadow-sm">
                             <Badge
@@ -602,7 +620,7 @@ export function UserManagement({
                               )}`}
                             >
                               {displayRole}
-                              {hasPendingChange && ' *'}
+                              {hasPendingChange && " *"}
                             </Badge>
                           </SelectTrigger>
                           <SelectContent className="border-2">
@@ -638,6 +656,7 @@ export function UserManagement({
                           variant="ghost"
                           size="sm"
                           onClick={() => setUserToDelete(user)}
+                          disabled={isSelf(user.id)}
                           className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/30"
                         >
                           <TrashIcon className="h-4 w-4" />
@@ -662,8 +681,8 @@ export function UserManagement({
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className={`rounded-md bg-[#0A66C2] text-white font-semibold px-4 py-2 transition-colors ${
                   page <= 1
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-[#004C99]'
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-[#004C99]"
                 }`}
               >
                 Prev
@@ -675,8 +694,8 @@ export function UserManagement({
                 onClick={() => setPage((p) => p + 1)}
                 className={`rounded-md bg-[#0A66C2] text-white font-semibold px-4 py-2 transition-colors ${
                   page * pageSize >= total
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-[#004C99]'
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-[#004C99]"
                 }`}
               >
                 Next
@@ -692,19 +711,19 @@ export function UserManagement({
         <Dot />
         <Stat
           label="Admins"
-          value={users.filter((u) => u.role === 'admin').length}
+          value={users.filter((u) => u.role === "admin").length}
           className="text-red-600 dark:text-red-400"
         />
         <Dot />
         <Stat
           label="Staff"
-          value={users.filter((u) => u.role === 'staff').length}
+          value={users.filter((u) => u.role === "staff").length}
           className="text-blue-600 dark:text-blue-400"
         />
         <Dot />
         <Stat
           label="Students"
-          value={users.filter((u) => u.role === 'student').length}
+          value={users.filter((u) => u.role === "student").length}
           className="text-green-600 dark:text-green-400"
         />
       </div>
@@ -753,8 +772,8 @@ export function UserManagement({
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Role Changes</AlertDialogTitle>
             <AlertDialogDescription>
-              You are about to change the roles for{' '}
-              {Object.keys(pendingRoleChanges).length} user(s).
+              You are about to change the roles for {pendingList.length}{" "}
+              user(s).
               <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
                 {pendingList.map((c, i) => (
                   <div key={i} className="p-4 bg-muted rounded-lg border">
@@ -814,7 +833,7 @@ function Stat({
   return (
     <div className="flex items-center gap-2">
       <span className="font-semibold">{label}:</span>
-      <span className={`font-bold ${className || ''}`}>{value}</span>
+      <span className={`font-bold ${className || ""}`}>{value}</span>
     </div>
   );
 }

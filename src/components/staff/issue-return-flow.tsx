@@ -98,6 +98,10 @@ export function IssueReturnFlow({
   const [quantityReturning, setQuantityReturning] = useState(1);
 
   const [emailSearchQuery, setEmailSearchQuery] = useState("");
+  const [issuingRequestId, setIssuingRequestId] = useState<string | null>(null);
+  const [issuedRequestIds, setIssuedRequestIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   // ISSUE TAB LOGIC
 
@@ -163,10 +167,24 @@ export function IssueReturnFlow({
       return;
     }
 
+    // prevent issuing same request again in the same session (UX guard)
+    if (issuedRequestIds.has(selectedApprovedRequestId)) {
+      notify.error("This request has already been issued.");
+      return;
+    }
+
+    // prevent double-click while request is sending
+    if (issuingRequestId === selectedApprovedRequestId) {
+      notify.error("Issuing in progress, please wait.");
+      return;
+    }
+
     const payloadItems = selectedEquipment.map((item) => ({
       equipmentId: item.equipmentId,
       qty: item.quantity,
     }));
+
+    setIssuingRequestId(selectedApprovedRequestId);
 
     startTransition(async () => {
       try {
@@ -174,6 +192,14 @@ export function IssueReturnFlow({
           equipmentRequestId: selectedApprovedRequestId,
           items: payloadItems,
         });
+
+        // only set after success
+        setIssuedRequestIds((prev) => {
+          const next = new Set(prev);
+          next.add(selectedApprovedRequestId);
+          return next;
+        });
+
         notify.success(
           `${selectedEquipment.length} item(s) issued to ${issueEmail}`
         );
@@ -185,7 +211,9 @@ export function IssueReturnFlow({
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Something went wrong";
-        notify.error("Issue failed");
+        notify.error(message);
+      } finally {
+        setIssuingRequestId(null);
       }
     });
   };
@@ -373,6 +401,8 @@ export function IssueReturnFlow({
               <div className="space-y-2">
                 {approvedRequests.map((request) => {
                   const isSelected = selectedApprovedRequestId === request.id;
+                  const alreadyIssued = issuedRequestIds.has(request.id);
+                  const inFlight = issuingRequestId === request.id;
 
                   return (
                     <div
@@ -400,16 +430,22 @@ export function IssueReturnFlow({
                       <Button
                         size="sm"
                         variant={isSelected ? "default" : "outline"}
+                        disabled={alreadyIssued || inFlight || isPending}
                         onClick={() => {
+                          if (alreadyIssued) {
+                            notify.error(
+                              "This request has already been issued."
+                            );
+                            return;
+                          }
+
                           if (isSelected) {
-                            // deselect
                             setSelectedApprovedRequestId(null);
                             setIssueEmail("");
                             setSelectedEquipment([]);
                             return;
                           }
 
-                          // select this request and prefill all its items
                           const selections: EquipmentItemSelection[] = [];
 
                           for (const item of request.items) {
@@ -441,7 +477,13 @@ export function IssueReturnFlow({
                           setSelectedEquipment(selections);
                         }}
                       >
-                        {isSelected ? "Selected" : "Select"}
+                        {alreadyIssued
+                          ? "Issued"
+                          : inFlight
+                          ? "Issuing..."
+                          : isSelected
+                          ? "Selected"
+                          : "Select"}
                       </Button>
                     </div>
                   );
@@ -454,7 +496,12 @@ export function IssueReturnFlow({
             onClick={handleIssue}
             className="w-full"
             disabled={
-              !issueEmail || selectedEquipment.length === 0 || isPending
+              !issueEmail ||
+              selectedEquipment.length === 0 ||
+              isPending ||
+              !selectedApprovedRequestId ||
+              issuingRequestId === selectedApprovedRequestId ||
+              issuedRequestIds.has(selectedApprovedRequestId)
             }
           >
             Issue Equipment ({selectedEquipment.length} item

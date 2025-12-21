@@ -228,9 +228,6 @@ export default async function AdminPage({
     start: b.start.toISOString(),
   }));
   const statusItems = await prisma.equipmentRequestItem.findMany({
-    where: {
-      dismissed: false,
-    },
     include: {
       equipment: true,
       request: {
@@ -262,6 +259,7 @@ export default async function AdminPage({
       : null,
     condition: item.condition,
     damageNotes: item.damageNotes,
+    dismissed: item.dismissed,
   }));
 
   // 4) Render
@@ -410,6 +408,7 @@ export default async function AdminPage({
                     initialQuery={initialQuery}
                     initialPage={initialPage}
                     pageSize={pageSize}
+                    currentUserId={user.id}
                   />
                 </CardContent>
               </Card>

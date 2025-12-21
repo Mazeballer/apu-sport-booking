@@ -40,6 +40,7 @@ export interface EquipmentStatusRow {
   returnedAt: string | null;
   condition: EquipReturnCondition | null;
   damageNotes: string | null;
+  dismissed: boolean;
 }
 
 interface EquipmentStatusProps {
@@ -67,8 +68,8 @@ export function EquipmentStatus({ rows = [] }: EquipmentStatusProps) {
     return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  // Overdue: issued more than 7 days ago, not fully returned, no final condition set
   const overdueEquipment = rows.filter((req) => {
+    if (req.dismissed) return false;
     if (!req.issuedAt) return false;
     if (req.condition !== null) return false;
     if (req.quantityReturned >= req.quantityBorrowed) return false;
@@ -77,12 +78,18 @@ export function EquipmentStatus({ rows = [] }: EquipmentStatusProps) {
     return daysSinceIssue > 7;
   });
 
-  const damagedEquipment = rows.filter((req) => req.condition === "damaged");
+  const damagedEquipment = rows.filter(
+    (req) => !req.dismissed && req.condition === "damaged"
+  );
 
-  const lostEquipment = rows.filter((req) => req.condition === "lost");
+  const lostEquipment = rows.filter(
+    (req) => !req.dismissed && req.condition === "lost"
+  );
 
-  // History: any item with a final condition, dismissed items are already filtered at query level
-  const returnHistory = rows.filter((req) => req.condition !== null);
+  // History includes dismissed even if condition is null
+  const returnHistory = rows.filter(
+    (req) => req.condition !== null || req.dismissed
+  );
 
   const getConditionBadge = (condition?: EquipReturnCondition | null) => {
     switch (condition) {
