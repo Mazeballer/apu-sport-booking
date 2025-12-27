@@ -19,11 +19,91 @@ const GRADIENT_STYLE = {
 };
 
 const SUGGESTED_QUESTIONS = [
-  "What facilities are available?",
-  "Can I bring my own equipment?",
+  "What facilities are available to book?",
+  "How to install PWA on my device?",
   "How do I cancel a booking?",
-  "Opening hours?",
+  "List Facilities",
 ];
+
+type Suggestion = { label: string; text: string };
+
+function extractTextFromMessage(msg: any): string {
+  if (!msg) return "";
+  return (msg.parts ?? [])
+    .filter((p: any) => p.type === "text")
+    .map((p: any) => String(p.text ?? ""))
+    .join("\n");
+}
+
+function uniq<T>(arr: T[]) {
+  return Array.from(new Set(arr));
+}
+
+// Finds times like 18:00, 7pm, 7 pm, 10:30am (we will normalize to what your backend accepts best)
+function extractTimeLabels(text: string): string[] {
+  const t = text.toLowerCase();
+
+  // Prefer 24h times already shown by your system (HH:mm)
+  const hhmm = t.match(/\b([01]\d|2[0-3]):[0-5]\d\b/g) ?? [];
+  if (hhmm.length > 0) return uniq(hhmm.map((x) => x.toUpperCase()));
+
+  // Fallback: am/pm, normalize to user-friendly, backend can parse "7pm" fine
+  const ampm = t.match(/\b([1-9]|1[0-2])(?::[0-5]\d)?\s?(am|pm)\b/g) ?? [];
+  return uniq(ampm.map((x) => x.replace(/\s+/g, "")));
+}
+
+function extractCourts(text: string): string[] {
+  const matches = text.match(/\bCourt\s*\d+\b/gi) ?? [];
+  return uniq(matches.map((m) => m.replace(/\s+/g, " ").trim()));
+}
+
+function extractEquipmentFromLine(text: string): string[] {
+  // Only trust explicit "Equipment:" lines
+  const line = text
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => /^Equipment:\s*/i.test(l));
+
+  if (!line) return [];
+  const after = line.replace(/^Equipment:\s*/i, "").trim();
+  if (!after || after.toLowerCase() === "none") return [];
+
+  return uniq(
+    after
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean)
+  );
+}
+
+function extractFacilitiesList(text: string): string[] {
+  // Your facility list is usually lines under "Active facilities..." or similar
+  // This grabs standalone lines that look like names (not bullet prompts).
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // Heuristic: take lines that are not instructions and not containing ":" and not too long
+  const candidates = lines.filter((l) => {
+    const lower = l.toLowerCase();
+    if (lower.startsWith("active facilities")) return false;
+    if (lower.startsWith("please")) return false;
+    if (lower.startsWith("example")) return false;
+    if (lower.startsWith('- "')) return false;
+    if (lower.startsWith("- ")) return false;
+    if (l.includes(":")) return false;
+    if (l.length > 40) return false;
+    return true;
+  });
+
+  // Also remove duplicates like Tennis vs tennis
+  const normalized = new Map<string, string>();
+  for (const c of candidates) {
+    normalized.set(c.toLowerCase(), c);
+  }
+  return Array.from(normalized.values());
+}
 
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -132,50 +212,105 @@ export function ChatWidget() {
     .reverse()
     .find((m) => m.role === "assistant");
 
-  const followUpSuggestions = (() => {
-    if (!lastUserMessage && !lastAssistantMessage) return [];
+  const followUpSuggestions: Suggestion[] = (() => {
+    const userTextRaw = extractTextFromMessage(lastUserMessage);
+    const assistantTextRaw = extractTextFromMessage(lastAssistantMessage);
+    const userText = userTextRaw.toLowerCase();
+    const assistantText = assistantTextRaw.toLowerCase();
 
-    const extractText = (msg: (typeof messages)[number] | undefined) =>
-      msg
-        ? msg.parts
-            .filter((p) => p.type === "text")
-            .map((p) => (p as any).text as string)
-            .join(" ")
-            .toLowerCase()
-        : "";
+    const suggestions: Suggestion[] = [];
 
-    const userText = extractText(lastUserMessage);
-    const assistantText = extractText(lastAssistantMessage);
-    const suggestions = new Set<string>();
+    const push = (label: string, text: string) => {
+      // avoid duplicates by label+text
+      const key = `${label}|||${text}`.toLowerCase();
+      const exists = suggestions.some(
+        (s) => `${s.label}|||${s.text}`.toLowerCase() === key
+      );
+      if (!exists) suggestions.push({ label, text });
+    };
 
+    // If assistant is asking for date only
+    if (
+      assistantText.includes("provide the booking date") ||
+      assistantText.includes("ask for the date only") ||
+      assistantText.includes("booking date (today, tomorrow") ||
+      assistantText.includes("date only")
+    ) {
+      push("Today", "today");
+      push("Tomorrow", "tomorrow");
+    }
+
+    // If assistant printed facilities list, let user tap a facility name
+    if (assistantText.includes("active facilities")) {
+      const facilityNames = extractFacilitiesList(assistantTextRaw);
+      for (const name of facilityNames.slice(0, 6)) {
+        push(name, name);
+      }
+      push("Check availability", "check availability");
+    }
+
+    // If assistant showed availability, extract times and courts
     if (
       assistantText.includes("availability") ||
-      assistantText.includes("time slots")
+      assistantText.includes("available start times")
     ) {
-      suggestions.add("Book one of these times");
-      suggestions.add("Check another day");
+      const times = extractTimeLabels(assistantTextRaw);
+      const courts = extractCourts(assistantTextRaw);
+
+      // If multiple courts exist, let user pick court first
+      if (courts.length > 1) {
+        for (const c of courts.slice(0, 4)) push(c, c);
+      }
+
+      // Always show a few time chips
+      for (const t of times.slice(0, 6)) {
+        push(t, t); // sending "19:00" works great with your flow
+      }
+
+      push("Today", "today");
+      push("Tomorrow", "tomorrow");
     }
-    if (assistantText.includes("how long")) {
-      suggestions.add("1 hour");
-      suggestions.add("2 hours");
+
+    // If assistant asks about duration
+    if (
+      assistantText.includes("duration") ||
+      assistantText.includes("how long")
+    ) {
+      push("1 hour", "1 hour");
+      push("2 hours", "2 hours");
     }
+
+    // If assistant mentions equipment, create meaningful options
     if (assistantText.includes("equipment")) {
-      suggestions.add("No equipment needed");
-      suggestions.add("Borrow both equipment");
+      const eq = extractEquipmentFromLine(assistantTextRaw);
+
+      push("No equipment", "no equipment");
+
+      // Only show equipment chips if system listed them explicitly
+      for (const name of eq.slice(0, 4)) {
+        push(name, name);
+      }
     }
-    if (assistantText.includes("booking has been created")) {
-      suggestions.add("Summarise my booking");
-      suggestions.add("Cancel this booking");
+
+    // If assistant is at confirmation step
+    if (
+      assistantText.includes("type **confirm**") ||
+      assistantText.includes("type confirm") ||
+      assistantText.includes("next action") ||
+      assistantText.includes("confirm to create")
+    ) {
+      push("Confirm booking", "confirm");
+      push("Cancel", "cancel");
     }
-    if (userText.includes("book") || userText.includes("reserve")) {
-      suggestions.add("Rules?");
-      suggestions.add("No-show policy?");
+
+    // If nothing matched, show useful defaults
+    if (suggestions.length === 0) {
+      push("List facilities", "list facilities");
+      push("Check availability", "check availability");
+      push("Rules", "rules");
     }
-    if (suggestions.size === 0) {
-      suggestions.add("What facilities?");
-      suggestions.add("Cancellation policy?");
-    }
-    return Array.from(suggestions);
+
+    return suggestions.slice(0, 8);
   })();
 
   return (
@@ -400,14 +535,15 @@ export function ChatWidget() {
             followUpSuggestions.length > 0 &&
             !isLoading && (
               <div className="px-4 py-2 bg-gray-50 dark:bg-[#0f1419] border-t border-gray-100 dark:border-gray-800 flex overflow-x-auto gap-2 no-scrollbar">
-                {followUpSuggestions.map((q) => (
+                {followUpSuggestions.map((s) => (
                   <button
-                    key={q}
-                    onClick={() => handleSuggestionClick(q)}
+                    key={`${s.label}|||${s.text}`}
+                    onClick={() => handleSuggestionClick(s.text)}
                     disabled={!isOnline || isLoading}
                     className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={s.text}
                   >
-                    {q}
+                    {s.label}
                   </button>
                 ))}
               </div>
@@ -441,8 +577,8 @@ export function ChatWidget() {
                 onClick={toggleRecording}
                 className={`h-11 w-11 rounded-full transition-all ${
                   isRecording
-                    ? "bg-red-50 text-red-500 hover:bg-red-100"
-                    : "bg-gray-100/50 text-gray-500 hover:bg-gray-100"
+                    ? "bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
+                    : "bg-gray-100/50 text-gray-500 hover:bg-gray-100 dark:bg-[#161b22] dark:text-gray-400 dark:hover:bg-gray-800"
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isRecording ? (

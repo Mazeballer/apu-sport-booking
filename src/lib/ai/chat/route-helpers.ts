@@ -2,9 +2,23 @@
 import type { UIMessage } from "ai";
 import * as chrono from "chrono-node";
 
-/* Malaysia time */
+/* -----------------------------
+   Date formatting (display)
+----------------------------- */
+
+export function formatDateDMY(isoDate: string): string {
+  // isoDate: "YYYY-MM-DD" -> "DD-MM-YYYY"
+  const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return isoDate;
+  const [, y, mo, d] = m;
+  return `${d}-${mo}-${y}`;
+}
+
+/* -----------------------------
+   Malaysia time helpers
+----------------------------- */
+
 export function getMalaysiaNow(): Date {
-  // get the current instant, then read it in Malaysia time parts
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Kuala_Lumpur",
     year: "numeric",
@@ -25,8 +39,7 @@ export function getMalaysiaNow(): Date {
   const mm = get("minute");
   const ss = get("second");
 
-  // Construct a Date that represents the Malaysia wall clock time (stable for keys and comparisons)
-  return new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}`);
+  return new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}+08:00`);
 }
 
 export function getMalaysiaToday(): string {
@@ -53,7 +66,52 @@ export function getMalaysiaDayKey(nowMy: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/* Fuzzy */
+/* -----------------------------
+   Text normalisation + date-only detection
+----------------------------- */
+
+export function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isDateOnlyMessage(text: string): boolean {
+  const t = normalizeText(text);
+
+  if (t === "today" || t === "tomorrow" || t === "yesterday") return true;
+
+  if (
+    t === "monday" ||
+    t === "tuesday" ||
+    t === "wednesday" ||
+    t === "thursday" ||
+    t === "friday" ||
+    t === "saturday" ||
+    t === "sunday"
+  ) {
+    return true;
+  }
+
+  // ISO date only (2025-12-27)
+  if (/^\d{4}\s*\d{2}\s*\d{2}$/.test(t.replace(/-/g, " "))) return true;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return true;
+
+  // DMY short (27/12 or 27-12)
+  if (/^\d{1,2}[\/-]\d{1,2}$/.test(t)) return true;
+
+  // DMY full (27/12/2025 or 27-12-2025)
+  if (/^\d{1,2}[\/-]\d{1,2}[\/-]\d{4}$/.test(t)) return true;
+
+  return false;
+}
+
+/* -----------------------------
+   Fuzzy matching helpers
+----------------------------- */
+
 const GENERIC_FACILITY_TOKENS = new Set([
   "court",
   "field",
@@ -66,14 +124,6 @@ const GENERIC_FACILITY_TOKENS = new Set([
   "facility",
   "facilities",
 ]);
-
-export function normalizeText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export function tokenizeForFuzzy(text: string): string[] {
   return normalizeText(text)
@@ -180,7 +230,10 @@ export function hasFuzzyBookingIntentWord(text: string): boolean {
   return false;
 }
 
-/* Conversation helpers */
+/* -----------------------------
+   Conversation helpers
+----------------------------- */
+
 export function getLastUserText(messages: UIMessage[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const m = messages[i];
@@ -197,7 +250,28 @@ export function getLastUserText(messages: UIMessage[]): string | undefined {
   return undefined;
 }
 
+/* -----------------------------
+   Date parsing (accept DD-MM-YYYY, still return ISO)
+----------------------------- */
+
 export function extractDate(text: string, refDate: Date): string | null {
+  const raw = text.trim();
+
+  // Manual DD-MM-YYYY or DD/MM/YYYY
+  const dmy = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (dmy) {
+    const day = String(Number(dmy[1])).padStart(2, "0");
+    const month = String(Number(dmy[2])).padStart(2, "0");
+    const year = dmy[3];
+
+    const mm = Number(month);
+    const dd = Number(day);
+
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      return `${year}-${month}-${day}`; // internal ISO
+    }
+  }
+
   const lower = text.toLowerCase();
 
   const hasDateHint =
@@ -209,6 +283,42 @@ export function extractDate(text: string, refDate: Date): string | null {
 
   const chronoResult = chrono.parseDate(text, refDate);
   return chronoResult ? chronoResult.toISOString().split("T")[0] : null;
+}
+
+export type ChatMode = "availability" | "booking" | null;
+
+export function getLastChatMode(messages: UIMessage[]): ChatMode {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m.role !== "user") continue;
+
+    const text = m.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as any).text as string)
+      .join(" ")
+      .trim()
+      .toLowerCase();
+
+    if (!text) continue;
+
+    if (
+      text === "check availability" ||
+      text === "availability" ||
+      text === "check available times"
+    ) {
+      return "availability";
+    }
+
+    if (
+      text === "make a booking" ||
+      text === "book" ||
+      text.startsWith("book ")
+    ) {
+      return "booking";
+    }
+  }
+
+  return null;
 }
 
 export function getRequestedDateFromConversation(
@@ -306,7 +416,10 @@ export function getFacilityAwareQuestionText(
   return lastUser;
 }
 
-/* Booking details prompt */
+/* -----------------------------
+   Booking details prompt
+----------------------------- */
+
 export type FacilityDetailsForPrompt = {
   name: string;
   courts: { id: string; name: string }[];
@@ -368,7 +481,10 @@ export function buildMissingBookingDetailsMessage(options: {
   return lines.join("\n");
 }
 
-/* Facility memory */
+/* -----------------------------
+   Facility memory
+----------------------------- */
+
 export function getLastFacilityIdFromConversation(
   messages: UIMessage[],
   facilities: { id: string; name: string; type: string }[]
@@ -382,6 +498,7 @@ export function getLastFacilityIdFromConversation(
 
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const m = messages[i];
+    if (m.role !== "user") continue;
 
     const text = m.parts
       .filter((p) => p.type === "text")
@@ -431,4 +548,21 @@ export function resolveFacilityAwareQuestionText(
 
   const synthetic = `${lastFacility.name} ${lastUserText}`.trim();
   return synthetic || text;
+}
+
+export function findFacilityExact(
+  text: string,
+  facilities: { id: string; name: string; type: string }[]
+): { id: string; name: string; type: string } | null {
+  const q = normalizeText(text);
+  if (!q) return null;
+
+  for (const f of facilities) {
+    const name = normalizeText(f.name);
+    const type = normalizeText(f.type);
+
+    if (q === name || (type && q === type)) return f;
+  }
+
+  return null;
 }

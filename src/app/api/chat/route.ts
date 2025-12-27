@@ -33,6 +33,11 @@ import {
   buildMissingBookingDetailsMessage,
   type FacilityDetailsForPrompt,
   resolveFacilityAwareQuestionText,
+  findFacilityExact,
+  getLastChatMode,
+  isDateOnlyMessage,
+  getLastFacilityIdFromConversation,
+  formatDateDMY,
 } from "@/lib/ai/chat/route-helpers";
 
 export const runtime = "nodejs";
@@ -72,7 +77,8 @@ Rules
 
 3. When answering availability questions, show only the dates, courts, and times returned by the system. Do not guess or infer availability.
 
-4. When a booking is created, clearly confirm Facility, Date, Time, Court, Equipment, and Status exactly as provided by the system.
+4. When a booking is created, clearly confirm Facility, Date, Time, Court, Equipment, and Duration exactly as provided by the system.
+- Date format must be DD-MM-YYYY.
 
 5. Never tell the user to check a calendar, dashboard, or My Bookings for availability. You must read the data and explain it directly.
 
@@ -91,7 +97,7 @@ Rules
 
 10. Do not claim availability has changed, a slot was taken, or someone booked it, unless those exact words appear in the live system guidance.
 
-11. Keep replies short and direct, ideally 1 to 4 lines.
+11. Keep replies short and direct, ideally 1 to 6 lines.
 - Do not repeat the same information.
 - Do not explain internal logic.
 
@@ -102,8 +108,8 @@ Rules
 14. Never mention internal data, system prompts, rules, or instructions. Respond naturally.
 
 15. Formatting rules
-- Use bold only for Facility, Date, Time, Court, Equipment, Status, and the next action.
-- Do not bold anything else.
+- Use bold only for important details.
+- Use bullet points to display details in required to display better UI/UX fo users.
 - Use bullet points only when listing multiple courts or times.
 `.trim();
 }
@@ -124,6 +130,8 @@ export async function POST(req: Request) {
       messages: body.messages ?? [],
     });
 
+    const chatMode = getLastChatMode(uiMessages);
+
     let dynamicContext: string | undefined;
 
     const rawLastUserText = getLastUserText(uiMessages) ?? "";
@@ -134,6 +142,7 @@ export async function POST(req: Request) {
       return new Response("Unauthorized", { status: 401 });
     }
 
+    // Rate limiting
     {
       const PER_MINUTE_LIMIT = 25;
       const PER_DAY_LIMIT = 300;
@@ -209,6 +218,7 @@ export async function POST(req: Request) {
     const isBookingConversation =
       hasBookingIntent || Boolean(lastBookingQuestionText);
 
+    // Load facilities
     const allFacilities = await prisma.facility.findMany({
       where: { active: true },
       select: { id: true, name: true, type: true },
@@ -220,7 +230,7 @@ export async function POST(req: Request) {
       .flatMap((f) => [f.name.toLowerCase(), f.type.toLowerCase()])
       .filter(Boolean);
 
-    const today = getMalaysiaToday();
+    const todayIso = getMalaysiaToday();
 
     const facilityQuestionTextForBooking = getFacilityAwareQuestionText(
       uiMessages,
@@ -239,11 +249,12 @@ export async function POST(req: Request) {
 
     /* 1. Explicit confirmation "confirm" */
     if (isConfirm) {
-      const requestedDate = getRequestedDateFromConversation(
+      const requestedDateIso = getRequestedDateFromConversation(
         uiMessages,
         lastUserText,
-        today
+        todayIso
       );
+      const requestedDateDmy = formatDateDMY(requestedDateIso);
 
       const facilityQuestionText =
         resolveFacilityAwareQuestionText(
@@ -333,14 +344,14 @@ Please say something like:
             if (!hasDuration) {
               dynamicContext = buildMissingBookingDetailsMessage({
                 facility: facilityForPrompt,
-                requestedDate,
+                requestedDate: requestedDateDmy,
                 hasDuration,
                 hasEquipmentDecision,
               });
             } else {
               const suggestion = await getBookingSuggestionFromQuestion({
                 questionText: facilityQuestionText,
-                requestedDate,
+                requestedDate: requestedDateIso,
               });
 
               if (!suggestion) {
@@ -358,7 +369,6 @@ Please say something like:
                   }
                 }
 
-                // Convert suggestion date + time into a real Date in Malaysia (+08:00)
                 const startForLimit = new Date(
                   `${suggestion.date}T${suggestion.suggestedTimeLabel}:00+08:00`
                 );
@@ -368,7 +378,7 @@ Please say something like:
                     userId: current.id,
                     start: startForLimit,
                   });
-                } catch (e: any) {
+                } catch (e: unknown) {
                   const msg =
                     e instanceof BookingLimitError
                       ? e.message
@@ -384,7 +394,7 @@ In your reply:
 - Say the booking was not created.
 - Explain the limit briefly using the system reason above.
 - Ask the user to cancel an existing booking or pick another date/time.
-  `.trim();
+                  `.trim();
 
                   const result = streamText({
                     model: groq(
@@ -398,7 +408,6 @@ In your reply:
                   return result.toUIMessageStreamResponse();
                 }
 
-                // Only create booking AFTER passing the limit check
                 const result = await createBookingFromAI(suggestion);
 
                 if (!result.ok) {
@@ -434,31 +443,28 @@ In your reply:
 
                   const equipmentLineForUser =
                     finalEquipInline !== ""
-                      ? `- Equipment: ${finalEquipInline}`
-                      : "- Equipment: none requested. You can still bring your own equipment.";
-
-                  const equipmentSourceOfTruth =
-                    finalEquipInline !== ""
                       ? `Equipment: ${finalEquipInline}`
                       : "Equipment: none";
 
+                  const durationLabel =
+                    suggestion.durationHours === 2 ? "2 hours" : "1 hour";
+
                   dynamicContext = `
-A booking has been created successfully:
+Booking confirmed.
 
 - Facility: ${result.facilityName}
-- Court: ${result.courtName}
-- Date: ${result.date}
+- Date: ${formatDateDMY(result.date)}
 - Time: ${result.timeLabel}
+- Court: ${result.courtName}
+- Duration: ${durationLabel}
+- ${equipmentLineForUser}
+
 ${equipmentLineForUser}
 
-${equipmentSourceOfTruth}
-
 In your reply:
-- Clearly say that the booking is confirmed.
-- Confirm the booking details exactly as shown.
-- When mentioning equipment copy the Equipment line exactly.
+- Confirm the details exactly.
+- When mentioning equipment, copy the Equipment line exactly.
 - Remind the user to arrive on time and follow any facility rules.
-You may remind the user they can view it in My Bookings.
                   `.trim();
                 }
               }
@@ -524,32 +530,151 @@ There is no separate rules table in the live data. You must answer using:
 
 In your reply:
 - Mention the facility name "${facilityRow.name}" clearly.
-- Explain the general booking and usage rules that apply at APU, such as:
-  - Arriving on time.
-  - Using proper sports attire and non marking shoes if relevant.
-  - Taking care of the equipment and facilities.
-  - Respecting booking durations and other users.
-- If the FAQ mentions anything about penalties for no shows or damage, you may include those.
+- Explain general booking and usage rules that apply at APU.
 - Do not invent detailed punishments, money fines, or disciplinary actions that are not stated in the FAQ or system guidance.
-- If something is not clearly specified, say that students should follow the posted rules at the sports centre or ask staff for the most accurate information.`;
+- If something is not clearly specified, say students should follow the posted rules at the sports centre or ask staff for the most accurate information.`;
         }
       }
     }
 
-    /* 4. Availability flows */
+    /* 3.9 Availability menu choice, ask for date only */
+    const availabilityMenuRegex =
+      /^(check availability|availability|check available times)$/i;
+
+    if (!dynamicContext && availabilityMenuRegex.test(lastUserText)) {
+      dynamicContext = `
+The user wants availability only.
+
+In your reply:
+- Ask for the date only (today, tomorrow, or DD-MM-YYYY).
+- Do NOT ask for time.
+- Do NOT ask for duration.
+- Do NOT ask about equipment.
+      `.trim();
+    }
+
+    /* 3.95 Date-only follow up after facility already chosen: go straight into booking flow */
+    if (!dynamicContext && isDateOnlyMessage(lastUserText)) {
+      const lastFacilityId = getLastFacilityIdFromConversation(
+        uiMessages,
+        allFacilities
+      );
+      const lastFacility = lastFacilityId
+        ? allFacilities.find((f) => f.id === lastFacilityId)
+        : null;
+
+      if (lastFacility) {
+        const requestedDateIso = getRequestedDateFromConversation(
+          uiMessages,
+          lastUserText,
+          todayIso
+        );
+
+        const data = await getFacilityAvailabilityById(
+          lastFacility.id,
+          requestedDateIso
+        );
+
+        if (!data) {
+          dynamicContext = `The system has no availability data for "${
+            lastFacility.name
+          }" on ${formatDateDMY(requestedDateIso)}.`;
+        } else {
+          const { facility, courts, bookings, date } = data;
+          const dateDmy = formatDateDMY(date);
+          const nowMy = getMalaysiaNow();
+
+          const lines: string[] = [];
+
+          for (const court of courts) {
+            const courtBookings = bookings.filter(
+              (b) => b.courtId === court.id
+            );
+
+            const openTime = facility.openTime ?? "08:00";
+            const closeTime = facility.closeTime ?? "22:00";
+
+            // List 1-hour start times for display
+            const free = computeFreeHours(
+              openTime,
+              closeTime,
+              date,
+              courtBookings,
+              nowMy,
+              1
+            );
+
+            if (free.length === 0) continue;
+
+            lines.push(
+              `${court.name}:\n${free.map((t) => `- ${t}`).join("\n")}`
+            );
+          }
+
+          if (lines.length === 0) {
+            dynamicContext = `
+Availability for "${facility.name}" on ${dateDmy}:
+
+No available slots remaining for today.
+
+In your reply:
+- Say there are no remaining slots.
+- Ask the user to choose another date.
+            `.trim();
+          } else {
+            const equipmentRows = await prisma.equipment.findMany({
+              where: { facilityId: facility.id },
+            });
+            const equipmentNames = equipmentRows.map((e) => e.name);
+            const equipmentInline =
+              equipmentNames.length > 0 ? equipmentNames.join(", ") : "";
+
+            const equipmentSection =
+              equipmentNames.length > 0
+                ? `Equipment: ${equipmentInline}`
+                : `Equipment: none`;
+
+            dynamicContext = `
+${facility.name} on ${dateDmy}
+
+Available start times:
+${lines.join("\n\n")}
+
+${equipmentSection}
+
+In your reply:
+- Show the availability grouped by court exactly as above.
+- Ask the user to reply with:
+  1) start time
+  2) duration (1 hour or 2 hours)
+  3) equipment from the Equipment line, or "no equipment"
+- Do not ask for the facility again.
+- Do not ask for the date again.
+- If Equipment is "none", say the user must bring their own if needed.
+            `.trim();
+          }
+        }
+      }
+    }
+
+    /* 4. Availability flows (normal) */
     if (
       !dynamicContext &&
       !isFacilitiesQuestion &&
-      (hasAvailabilityKeyword || hasBookingIntent || isFollowUpAvailability) &&
+      (hasAvailabilityKeyword ||
+        hasBookingIntent ||
+        isFollowUpAvailability ||
+        (chatMode === "availability" && isDateOnlyMessage(lastUserText))) &&
       !hasExplicitTime &&
       !isConfirm &&
       !isCancel
     ) {
-      const requestedDate = getRequestedDateFromConversation(
+      const requestedDateIso = getRequestedDateFromConversation(
         uiMessages,
         lastUserText,
-        today
+        todayIso
       );
+      const requestedDateDmy = formatDateDMY(requestedDateIso);
 
       const facilityQuestionText =
         resolveFacilityAwareQuestionText(
@@ -559,64 +684,84 @@ In your reply:
           lastUserText
         ) ?? "";
 
-      const wantsBookingFlow =
-        hasBookingIntent || isFollowUpAvailability || isBookingConversation;
+      let facilityQuestionTextFinal = facilityQuestionText;
 
       if (
-        !facilityQuestionText ||
+        chatMode === "availability" &&
+        isDateOnlyMessage(lastUserText) &&
+        (!facilityQuestionTextFinal ||
+          !facilityTokens.some((t) =>
+            facilityQuestionTextFinal.toLowerCase().includes(t)
+          ))
+      ) {
+        const lastFacilityId = getLastFacilityIdFromConversation(
+          uiMessages,
+          allFacilities
+        );
+        const lastFacility = lastFacilityId
+          ? allFacilities.find((f) => f.id === lastFacilityId)
+          : null;
+
+        if (lastFacility) {
+          facilityQuestionTextFinal = `${lastFacility.name} availability ${lastUserText}`;
+        }
+      }
+
+      const wantsBookingFlow =
+        chatMode === "booking"
+          ? true
+          : chatMode === "availability"
+          ? false
+          : hasBookingIntent || isFollowUpAvailability || isBookingConversation;
+
+      if (
+        !facilityQuestionTextFinal ||
         !facilityTokens.some((t) =>
-          facilityQuestionText.toLowerCase().includes(t)
+          facilityQuestionTextFinal.toLowerCase().includes(t)
         )
       ) {
         if (facilityNames.length === 0) {
-          if (wantsBookingFlow) {
-            dynamicContext = `You want to know what time you can book on ${requestedDate}, but there are no active facilities in the system yet.`;
-          } else {
-            dynamicContext = `You asked about availability on ${requestedDate}, but there are no active facilities in the database. Ask the sports admin for help.`;
-          }
+          dynamicContext = wantsBookingFlow
+            ? `You want to know what time you can book on ${requestedDateDmy}, but there are no active facilities in the system yet.`
+            : `You asked about availability on ${requestedDateDmy}, but there are no active facilities in the database.`;
         } else {
-          if (wantsBookingFlow) {
-            dynamicContext = `I did not fully understand your booking question.
-
-You want to know what time you can book around ${requestedDate}, but the system could not clearly detect which facility you mean.
+          dynamicContext = wantsBookingFlow
+            ? `I could not detect which facility you mean.
 
 Active facilities:
 ${facilityNames.join("\n")}
 
-Please say something like:
-- "What time can I book Tennis on ${requestedDate}?"
-- "What time is Basketball Court available to book today?"`;
-          } else {
-            dynamicContext = `I did not fully understand your availability question.
+Example:
+- "What time can I book Tennis on ${requestedDateDmy}?"`
+            : `I could not detect which facility you mean.
 
-You want to know about availability around ${requestedDate}, but the system could not clearly detect which facility you mean.
-
-These are the active facilities in the system:
+Active facilities:
 ${facilityNames.join("\n")}
 
-Ask about one facility at a time, for example:
-- "What time is Tennis free on ${requestedDate}?"
-- "What time is Basketball Court available on ${requestedDate}?"`;
-          }
+Example:
+- "What time is Tennis free on ${requestedDateDmy}?"`;
         }
       } else {
         const facilityId = findFacilityIdStrict(
-          facilityQuestionText,
+          facilityQuestionTextFinal,
           allFacilities
         );
 
         if (!facilityId) {
-          dynamicContext = `I could not find any active facility matching "${facilityQuestionText}".`;
+          dynamicContext = `I could not find any active facility matching "${facilityQuestionTextFinal}".`;
         } else {
           const data = await getFacilityAvailabilityById(
             facilityId,
-            requestedDate
+            requestedDateIso
           );
 
           if (!data) {
-            dynamicContext = `The system has no availability data for that facility on ${requestedDate}.`;
+            dynamicContext = `The system has no availability data for that facility on ${requestedDateDmy}.`;
           } else {
             const { facility, courts, bookings, date } = data;
+            const dateDmy = formatDateDMY(date);
+            const nowMy = getMalaysiaNow();
+
             const lines: string[] = [];
 
             for (const court of courts) {
@@ -627,84 +772,71 @@ Ask about one facility at a time, for example:
               const openTime = facility.openTime ?? "08:00";
               const closeTime = facility.closeTime ?? "22:00";
 
+              // List 1-hour start times for display
               const free = computeFreeHours(
                 openTime,
                 closeTime,
                 date,
                 courtBookings,
-                getMalaysiaNow()
+                nowMy,
+                1
               );
 
-              if (free.length === 0) {
-                lines.push(
-                  `- ${court.name}: no free one hour slots on ${date}`
-                );
-              } else {
-                lines.push(`- ${court.name}:\n  ${free.join(", ")}`);
-              }
+              if (free.length === 0) continue;
+
+              lines.push(
+                `${court.name}:\n${free.map((t) => `- ${t}`).join("\n")}`
+              );
             }
 
-            let courtInstruction = "";
-
-            if (courts.length === 1) {
-              courtInstruction = `
-This facility has only one court: "${courts[0].name}".
-
-In your reply:
-- Do not mention any other courts.
-- Do not ask the user to choose a court.
-- Always assume bookings use "${courts[0].name}".`;
-            } else {
-              courtInstruction = `
-In your reply:
-- Ask the user which COURT they want from the list above.`;
-            }
-
+            // Availability only mode
             if (!wantsBookingFlow) {
-              dynamicContext = `Availability for "${facility.name}" on ${date}:
+              dynamicContext = `
+Availability for "${facility.name}" on ${dateDmy}:
 
-${lines.join("\n")}
+${lines.length === 0 ? "No available slots remaining." : lines.join("\n\n")}
+              `.trim();
 
-In your reply:
-- Show these times clearly to the user once. Do not repeat the same list again in another paragraph.
-- This is an availability only question, so do not ask them which time they want to book yet.
-- Do not ask for duration or equipment yet.
-- If they later ask "can you book 10am" or similar, you will handle the booking in a separate step.`;
-            } else {
-              const equipmentRows = await prisma.equipment.findMany({
-                where: { facilityId: facility.id },
+              const result = streamText({
+                model: groq(process.env.GROQ_MODEL ?? "llama-3.1-8b-instant"),
+                system: buildSystemPrompt(dynamicContext),
+                messages: convertToModelMessages(uiMessages),
+                temperature: 0,
               });
-              const equipmentNames = equipmentRows.map((e) => e.name);
-              const equipmentInline =
-                equipmentNames.length > 0 ? equipmentNames.join(", ") : "";
 
-              const equipmentSection =
-                equipmentNames.length > 0
-                  ? `
+              return result.toUIMessageStreamResponse();
+            }
 
-Equipment: ${equipmentInline}
+            // Booking flow mode
+            const equipmentRows = await prisma.equipment.findMany({
+              where: { facilityId: facility.id },
+            });
+            const equipmentNames = equipmentRows.map((e) => e.name);
+            const equipmentInline =
+              equipmentNames.length > 0 ? equipmentNames.join(", ") : "";
 
-In your reply:
-- If you ask about equipment, you MUST repeat the line starting with "Equipment:" exactly as shown above and you MUST NOT add or remove any equipment names.`
-                  : `
-This facility currently has no equipment configured in the system. If the user needs equipment, tell them they may need to bring their own.`;
+            const equipmentSection =
+              equipmentNames.length > 0
+                ? `Equipment: ${equipmentInline}`
+                : `Equipment: none`;
 
-              dynamicContext = `Availability for "${facility.name}" on ${date}:
+            dynamicContext = `
+${facility.name} on ${dateDmy}
 
-${lines.join("\n")}
+Available start times:
+${lines.join("\n\n")}
 
-${courtInstruction}
 ${equipmentSection}
 
 In your reply:
-- First, show these available times clearly once. Do not print the same list again after that.
-- Then treat this as the start of a booking flow.
-- Ask the user:
-  1) Which START TIME they want from the list.
-  2) How long they want the booking (1 hour or 2 hours).
-  3) Whether they want any equipment or no equipment.
-- Do not ask them for the date again. Use ${date} as the booking date.`;
-            }
+- Show the availability grouped by court exactly as above.
+- Ask the user to reply with:
+  1) start time
+  2) duration (1 hour or 2 hours)
+  3) equipment from the Equipment line, or "no equipment"
+- Do not ask for the facility again.
+- Do not ask for the date again.
+            `.trim();
           }
         }
       }
@@ -723,11 +855,12 @@ In your reply:
       !isFollowUpAvailability;
 
     if (shouldHandleBookingWithTime) {
-      const requestedDate = getRequestedDateFromConversation(
+      const requestedDateIso = getRequestedDateFromConversation(
         uiMessages,
         lastUserText,
-        today
+        todayIso
       );
+      const requestedDateDmy = formatDateDMY(requestedDateIso);
 
       const facilityQuestionText =
         facilityQuestionTextForBooking ??
@@ -745,17 +878,15 @@ In your reply:
         )
       ) {
         if (facilityNames.length === 0) {
-          dynamicContext = `You want to make a booking on ${requestedDate}, but there are no active facilities in the system yet.`;
+          dynamicContext = `You want to make a booking on ${requestedDateDmy}, but there are no active facilities in the system yet.`;
         } else {
-          dynamicContext = `I did not fully understand your booking request.
+          dynamicContext = `I could not detect which facility you want.
 
-You asked about a booking around ${requestedDate}, but the system could not clearly detect which facility you mean.
 Active facilities:
 ${facilityNames.join("\n")}
 
-Please say something like:
-- "Book Tennis tomorrow at 6pm"
-- "Help me book Basketball Court on Friday at 5pm"`;
+Example:
+- "Book Tennis tomorrow at 6pm"`;
         }
       } else {
         const facilityId = findFacilityIdStrict(
@@ -812,7 +943,7 @@ Please say something like:
 
             const suggestion = await getBookingSuggestionFromQuestion({
               questionText: facilityQuestionText,
-              requestedDate,
+              requestedDate: requestedDateIso,
             });
 
             if (!suggestion) {
@@ -822,10 +953,9 @@ Please say something like:
 ${suggestion.reason}
 
 In your reply:
-- Explain clearly that there are no free one hour slots for that facility on ${requestedDate}.
+- Explain there are no free slots for that facility on ${requestedDateDmy}.
 - Do not create or confirm any booking.
-- Do not choose a different date or time by yourself.
-- Ask the user if they want to check availability on another date or pick a different time.
+- Ask the user to choose another date or time.
               `.trim();
             } else if (!hasDuration || !hasEquipmentDecision) {
               const availableEquipInline =
@@ -835,28 +965,23 @@ In your reply:
 
               const availableEquipmentLine =
                 availableEquipInline !== ""
-                  ? `Available equipment: ${availableEquipInline}`
-                  : "Available equipment: none (the user must bring their own if needed).";
+                  ? `Equipment: ${availableEquipInline}`
+                  : "Equipment: none";
 
               if (suggestion.isExactMatch) {
                 dynamicContext = `
-You are in the middle of a booking flow.
+Booking details so far
 
-Requested booking so far:
 - Facility: ${suggestion.facilityName}
-- Court: ${suggestion.courtName}
-- Date: ${suggestion.date}
+- Date: ${formatDateDMY(suggestion.date)}
 - Time: ${suggestion.suggestedTimeLabel}
-${availableEquipmentLine}
+- Court: ${suggestion.courtName}
+- ${availableEquipmentLine}
 
 In your reply:
-- Confirm the facility, court, date and time.
-- Do NOT say "Equipment: ..." as if equipment has already been chosen.
-- Treat the equipment above as AVAILABLE options only.
-- Ask the user how long they want the booking (1 hour or 2 hours).
-- Ask the user whether they want to borrow any of the available equipment, or no equipment.
-
-Do not say you still need to check availability for this time and do not suggest any other times.
+- Confirm the details above.
+- Ask for duration (1 hour or 2 hours).
+- Ask for equipment from the Equipment line, or "no equipment".
                 `.trim();
               } else {
                 const equipmentLineWithLabel =
@@ -867,65 +992,70 @@ Do not say you still need to check availability for this time and do not suggest
                     : "Equipment: none";
 
                 dynamicContext = `
-You are in the middle of a booking flow.
+That time is not available.
 
-The requested time ${suggestion.requestedTimeLabel} is not free for "${suggestion.facilityName}" on ${suggestion.date}.
-You must offer only this nearest available one hour slot:
+Nearest available slot:
 - Facility: ${suggestion.facilityName}
-- Court: ${suggestion.courtName}
-- Date: ${suggestion.date}
+- Date: ${formatDateDMY(suggestion.date)}
 - Time: ${suggestion.suggestedTimeLabel}
-${equipmentLineWithLabel}
+- Court: ${suggestion.courtName}
+- ${equipmentLineWithLabel}
 
-Your reply to the user must:
-1) Explain briefly that their requested time is not available.
-2) Present the suggested time above as the alternative.
-3) Ask if they want to use this suggested time.
-4) Ask how long they want the booking (1 hour or 2 hours).
-5) Ask whether they want any equipment from the Equipment line or no equipment.
-
-Do not invent any extra alternative times.
+In your reply:
+- Ask if they want this suggested time.
+- Ask for duration (1 hour or 2 hours).
+- Ask for equipment from the Equipment line, or "no equipment".
                 `.trim();
               }
             } else {
-              const durationLabel = /\b2\s*hours|two\s*hours\b/i.test(
-                facilityQuestionText
-              )
-                ? "2 hours"
-                : "1 hour";
+              const durationLabel =
+                suggestion.durationHours === 2 ? "2 hours" : "1 hour";
 
               const chosenEquipInline =
                 suggestion.chosenEquipmentNames &&
                 suggestion.chosenEquipmentNames.length > 0
                   ? suggestion.chosenEquipmentNames.join(", ")
-                  : "none";
-
-              const equipmentLine = `Equipment: ${chosenEquipInline}`;
+                  : "No equipment";
 
               dynamicContext = `
-The user has provided all booking details, but the booking has NOT been created yet.
+Booking summary
 
-Planned booking:
-- Facility: ${suggestion.facilityName}
-- Court: ${suggestion.courtName}
-- Date: ${suggestion.date}
-- Time: ${suggestion.suggestedTimeLabel}
-- Duration: ${durationLabel}
+- **Facility:** ${suggestion.facilityName}
+- **Date:** ${formatDateDMY(suggestion.date)}
+- **Time:** ${suggestion.suggestedTimeLabel}
+- **Court:** ${suggestion.courtName}
+- **Duration:** ${durationLabel}
+- **Equipment:** ${chosenEquipInline}
 
-${equipmentLine}
-
-In your reply:
-- Show these details clearly to the user.
-- Tell them that if everything looks correct, they should type "confirm" to create the booking.
-- Make it clear that the booking is NOT created yet.
-- Do NOT say that the booking is already confirmed.
-- Do NOT say or imply that this time is unavailable, taken, or that someone else just booked it.
-- Do NOT say that availability changed.
-- Do NOT suggest any other times, because this time is already verified as available.
+**Next action:** Type **confirm** to create this booking, or **cancel** to stop.
               `.trim();
             }
           }
         }
+      }
+    }
+
+    /* 5.5 Facility name only (e.g. user types "tennis") */
+    if (
+      !dynamicContext &&
+      !isFacilitiesQuestion &&
+      !hasAvailabilityKeyword &&
+      !hasBookingIntent &&
+      !hasExplicitTime &&
+      !isConfirm &&
+      !isCancel
+    ) {
+      const exactFacility = findFacilityExact(lastUserText, allFacilities);
+
+      if (exactFacility) {
+        dynamicContext = `
+The user chose the facility "${exactFacility.name}" and wants to proceed.
+
+In your reply:
+- Confirm the facility name "${exactFacility.name}".
+- Ask for the booking date only (today, tomorrow, or DD-MM-YYYY).
+- Do not ask whether they want to check availability or make a booking.
+        `.trim();
       }
     }
 
@@ -937,38 +1067,27 @@ In your reply:
         dynamicContext = `
 The last user message was: "${rawLastUserText}".
 
-The system has a fuzzy guess that the user might be talking about the facility "${guess.name}", but this is NOT certain.
+The system has a fuzzy guess that the user might be talking about the facility "${guess.name}", but this is not certain.
 
 In your reply:
-- Do NOT create any booking.
-- Do NOT show availability yet.
-- Ask a short clarification question such as:
-  "Did you mean ${guess.name}?"
-- If they say yes, tell them to ask again clearly, for example:
-  "Book ${guess.name} tomorrow at 6pm"
-  or
-  "What time is ${guess.name} available on Friday?"
-- If they say no, ask them to type the facility name clearly from the list of active facilities, or say which sport they want.
+- Ask a short clarification question: "Did you mean ${guess.name}?"
+- Do not show availability yet.
+- Do not create any booking.
         `.trim();
       } else {
         dynamicContext = `
 The last user message was: "${rawLastUserText}".
 
-The system could not confidently detect any:
-- specific facility name, or
-- clear booking or availability question.
-
 In your reply:
-- Politely explain that you are not fully sure what they mean.
-- Ask them to mention ONE facility and what they want, for example:
-  - "Book Basketball Court tomorrow at 6pm"
-  - "What time is Football Field available on Friday?"
-- Do NOT invent any facilities, equipment, times or bookings.
+- Ask them to mention one facility and what they want, for example:
+  - "Book Tennis tomorrow at 6pm"
+  - "What time is Basketball Court available on Friday?"
+- Do not invent facilities, equipment, times, or bookings.
         `.trim();
       }
     }
 
-    // 7. Final model call
+    // Final model call
     const result = streamText({
       model: groq(process.env.GROQ_MODEL ?? "llama-3.1-8b-instant"),
       system: buildSystemPrompt(dynamicContext),
