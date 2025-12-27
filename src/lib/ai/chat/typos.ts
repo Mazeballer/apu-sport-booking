@@ -1,16 +1,10 @@
 // src/lib/ai/chat/typos.ts
 
 export type ReplacementRule = {
-  // Whole word or phrase to match (already normalized input).
   from: string;
-  // Replacement string (also normalized style).
   to: string;
 };
 
-/**
- * Base normalizer to stabilize user input for intent detection and matching.
- * This is NOT AI, it is deterministic text cleanup.
- */
 function baseNormalizeText(input: string): string {
   if (!input) return "";
 
@@ -36,11 +30,6 @@ function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * Applies phrase replacements in a safe order:
- * - Longer phrases first, so "basket ball" is fixed before "ball".
- * - Boundary-ish matching to reduce partial word issues.
- */
 export function applyReplacements(
   normalizedText: string,
   rules: ReplacementRule[]
@@ -63,10 +52,6 @@ export function applyReplacements(
   return text;
 }
 
-/**
- * Central replacement rules.
- * Keep this focused on booking/equipment terms that affect routing and matching.
- */
 export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   // Booking intent and actions
   { from: "bok", to: "book" },
@@ -169,15 +154,9 @@ export const BOOKING_TYPO_RULES: ReplacementRule[] = [
   { from: "no equipments", to: "no equipment" },
   { from: "dont need equipment", to: "no equipment" },
   { from: "do not need equipment", to: "no equipment" },
-
-  // Caution: only safe if your chat domain is strictly booking.
   { from: "none", to: "no equipment" },
 ];
 
-/**
- * Convenience helper used by normalize.ts
- * Base normalize, then apply booking typo rules.
- */
 export function normalizeForBookingChat(input: string) {
   const normalized = baseNormalizeText(input);
   return applyReplacements(normalized, BOOKING_TYPO_RULES);
