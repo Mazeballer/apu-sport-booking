@@ -349,7 +349,7 @@ export function ChatWidget() {
               </div>
               <div>
                 <h3 className="font-bold text-white text-lg tracking-wide">
-                  Assistant
+                  AI Assistant
                 </h3>
                 <p className="text-xs flex items-center gap-1 font-medium text-white">
                   <span
@@ -388,7 +388,7 @@ export function ChatWidget() {
           {/* Offline banner */}
           {!isOnline && (
             <div className="px-4 py-2 text-xs text-red-700 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/30">
-              Assistant is offline right now. Please try again later.
+              AI Assistant is offline right now. Please try again later.
             </div>
           )}
 
@@ -560,7 +560,7 @@ export function ChatWidget() {
                 <Input
                   name="chat-message"
                   placeholder={
-                    isOnline ? "Type a message..." : "Assistant is offline"
+                    isOnline ? "Type a message..." : "AI Assistant is offline"
                   }
                   disabled={isLoading || !isOnline}
                   value={inputValue}
