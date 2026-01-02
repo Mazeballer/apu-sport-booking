@@ -187,12 +187,37 @@ export async function getBookingSuggestionFromQuestion(
 
   // default duration is 1 hour
   let durationHours = 1;
+  let hasInvalidDuration = false;
   const durationLower = questionText.toLowerCase();
 
-  if (/\b(2\s*hours|two\s*hours|2hr|2-hr|2 hour)\b/.test(durationLower)) {
+  // Check for invalid durations first (3+ hours)
+  const invalidDurationMatch = durationLower.match(
+    /\b([3-9]|[1-9]\d+)\s*(hours?|hrs?)\b/
+  );
+  if (invalidDurationMatch) {
+    hasInvalidDuration = true;
+  }
+
+  if (/\b(2\s*hours?|two\s*hours?|2\s*hr|2-hr)\b/.test(durationLower)) {
     durationHours = 2;
-  } else if (/\b(1\s*hour|one\s*hour|1hr|1-hr|1 hour)\b/.test(durationLower)) {
+  } else if (/\b(1\s*hours?|one\s*hours?|1\s*hr|1-hr)\b/.test(durationLower)) {
     durationHours = 1;
+  }
+
+  // If user specified an invalid duration, return error
+  if (hasInvalidDuration) {
+    return {
+      facilityId: facility.id,
+      facilityName: facility.name,
+      courtId: court.id,
+      courtName: court.name,
+      date,
+      requestedTimeLabel: null,
+      suggestedTimeLabel: freeSlots[0] ?? "",
+      isExactMatch: false,
+      durationHours: 1,
+      reason: `Bookings can only be made for **1 hour** or **2 hours**. Please specify a valid duration.`,
+    };
   }
 
   // First, prefer explicit times with am/pm like "8am", "8 pm", "10:30am"
@@ -249,6 +274,38 @@ export async function getBookingSuggestionFromQuestion(
 
       let h = rawHour;
       const m = minutesPart ? parseInt(minutesPart, 10) : 0;
+
+      // Smart AM/PM inference for ambiguous times (1-12 without AM/PM)
+      // If rawHour is already >= 13, it's clearly 24h format
+      if (rawHour >= 1 && rawHour <= 12) {
+        const now = new Date();
+        const currentHour = now.getHours();
+
+        // Two possibilities: rawHour as-is (AM), or rawHour + 12 (PM)
+        const amOption = rawHour === 12 ? 0 : rawHour; // 12 AM = 0, 1-11 AM = 1-11
+        const pmOption = rawHour === 12 ? 12 : rawHour + 12; // 12 PM = 12, 1-11 PM = 13-23
+
+        // Pick the option that is >= current hour (still in the future or current)
+        // If both are in the future, pick the closer one
+        const amInFuture = amOption >= currentHour;
+        const pmInFuture = pmOption >= currentHour;
+
+        if (amInFuture && pmInFuture) {
+          // Both are in the future, pick the closer one
+          const amDiff = amOption - currentHour;
+          const pmDiff = pmOption - currentHour;
+          h = amDiff <= pmDiff ? amOption : pmOption;
+        } else if (pmInFuture) {
+          // Only PM is in the future
+          h = pmOption;
+        } else if (amInFuture) {
+          // Only AM is in the future (rare, would be late night)
+          h = amOption;
+        } else {
+          // Both are in the past, default to PM (next occurrence)
+          h = pmOption;
+        }
+      }
 
       hour = h;
 
@@ -322,7 +379,12 @@ export async function getBookingSuggestionFromQuestion(
   const chosenEquipmentNames: string[] = [];
 
   for (const eq of equipmentRows) {
-    if (questionLower.includes(eq.name.toLowerCase())) {
+    const eqNameLower = eq.name.toLowerCase();
+    // Check if all words from the equipment name appear in the question
+    const eqWords = eqNameLower.split(/\s+/).filter(w => w.length > 0);
+    const allWordsFound = eqWords.every(word => questionLower.includes(word));
+    
+    if (allWordsFound || questionLower.includes(eqNameLower)) {
       chosenEquipmentIds.push(eq.id);
       chosenEquipmentNames.push(eq.name);
     }

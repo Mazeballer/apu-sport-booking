@@ -316,9 +316,13 @@ Please say something like:
             const qLower = facilityQuestionText.toLowerCase();
 
             const hasDuration =
-              /\b(1\s*hour|one\s*hour|2\s*hours|two\s*hours)\b/i.test(
+              /\b(1\s*hours?|one\s*hours?|2\s*hours?|two\s*hours?)\b/i.test(
                 facilityQuestionText
               );
+
+            // Check for invalid durations (3+ hours)
+            const hasInvalidDuration =
+              /\b([3-9]|[1-9]\d+)\s*(hours?|hrs?)\b/i.test(facilityQuestionText);
 
             let hasEquipmentDecision = false;
             let deniesEquipment = false;
@@ -332,16 +336,27 @@ Please say something like:
                   qLower
                 );
 
-              chosenEquipmentNamesFromText =
-                facilityForPrompt.equipmentNames.filter((name) =>
-                  qLower.includes(name.toLowerCase())
-                );
+              // Use word-based matching for equipment names
+              chosenEquipmentNamesFromText = facilityForPrompt.equipmentNames.filter(
+                (name) => {
+                  const nameLower = name.toLowerCase();
+                  const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 0);
+                  const allWordsFound = nameWords.every((word) => qLower.includes(word));
+                  return allWordsFound || qLower.includes(nameLower);
+                }
+              );
 
               hasEquipmentDecision =
                 deniesEquipment || chosenEquipmentNamesFromText.length > 0;
             }
 
-            if (!hasDuration) {
+            if (hasInvalidDuration) {
+              dynamicContext = `
+Bookings can only be made for **1 hour** or **2 hours**.
+
+You requested a duration that is not allowed. Please specify either 1 hour or 2 hours for your booking.
+              `.trim();
+            } else if (!hasDuration) {
               dynamicContext = buildMissingBookingDetailsMessage({
                 facility: facilityForPrompt,
                 requestedDate: requestedDateDmy,
@@ -626,31 +641,33 @@ In your reply:
               where: { facilityId: facility.id },
             });
             const equipmentNames = equipmentRows.map((e) => e.name);
-            const equipmentInline =
-              equipmentNames.length > 0 ? equipmentNames.join(", ") : "";
+
+            const equipmentList =
+              equipmentNames.length > 0
+                ? [...equipmentNames, "No equipment"]
+                    .map((e, i) => `${i + 1}. ${e}`)
+                    .join("\n")
+                : "";
 
             const equipmentSection =
-              equipmentNames.length > 0
-                ? `Equipment: ${equipmentInline}`
-                : `Equipment: none`;
+              equipmentList !== ""
+                ? `**Equipment options:**\n${equipmentList}`
+                : "No equipment available (bring your own if needed)";
 
             dynamicContext = `
 ${facility.name} on ${dateDmy}
 
-Available start times:
+**Available times:**
 ${lines.join("\n\n")}
 
 ${equipmentSection}
 
 In your reply:
-- Show the availability grouped by court exactly as above.
-- Ask the user to reply with:
-  1) start time
-  2) duration (1 hour or 2 hours)
-  3) equipment from the Equipment line, or "no equipment"
+- Show the available times grouped by court.
+- Show the equipment options as a numbered list.
+- Ask the user to reply with: time, duration (1 or 2 hours), and equipment choice.
 - Do not ask for the facility again.
 - Do not ask for the date again.
-- If Equipment is "none", say the user must bring their own if needed.
             `.trim();
           }
         }
@@ -812,28 +829,31 @@ ${lines.length === 0 ? "No available slots remaining." : lines.join("\n\n")}
               where: { facilityId: facility.id },
             });
             const equipmentNames = equipmentRows.map((e) => e.name);
-            const equipmentInline =
-              equipmentNames.length > 0 ? equipmentNames.join(", ") : "";
+
+            const equipmentList =
+              equipmentNames.length > 0
+                ? [...equipmentNames, "No equipment"]
+                    .map((e, i) => `${i + 1}. ${e}`)
+                    .join("\n")
+                : "";
 
             const equipmentSection =
-              equipmentNames.length > 0
-                ? `Equipment: ${equipmentInline}`
-                : `Equipment: none`;
+              equipmentList !== ""
+                ? `**Equipment options:**\n${equipmentList}`
+                : "No equipment available (bring your own if needed)";
 
             dynamicContext = `
 ${facility.name} on ${dateDmy}
 
-Available start times:
+**Available times:**
 ${lines.join("\n\n")}
 
 ${equipmentSection}
 
 In your reply:
-- Show the availability grouped by court exactly as above.
-- Ask the user to reply with:
-  1) start time
-  2) duration (1 hour or 2 hours)
-  3) equipment from the Equipment line, or "no equipment"
+- Show the available times grouped by court.
+- Show the equipment options as a numbered list.
+- Ask the user to reply with: time, duration (1 or 2 hours), and equipment choice.
 - Do not ask for the facility again.
 - Do not ask for the date again.
             `.trim();
@@ -920,9 +940,13 @@ Example:
             const qLower = facilityQuestionText.toLowerCase();
 
             const hasDuration =
-              /\b(1\s*hour|one\s*hour|2\s*hours|two\s*hours)\b/i.test(
+              /\b(1\s*hours?|one\s*hours?|2\s*hours?|two\s*hours?)\b/i.test(
                 facilityQuestionText
               );
+
+            // Check for invalid durations (3+ hours)
+            const hasInvalidDuration =
+              /\b([3-9]|[1-9]\d+)\s*(hours?|hrs?)\b/i.test(facilityQuestionText);
 
             let hasEquipmentDecision = false;
             if (facilityForPrompt.equipmentNames.length === 0) {
@@ -933,10 +957,15 @@ Example:
                   qLower
                 );
 
-              const mentionsAnyEquipment =
-                facilityForPrompt.equipmentNames.some((name) =>
-                  qLower.includes(name.toLowerCase())
-                );
+              // Check if any equipment is mentioned (using word-based matching)
+              const mentionsAnyEquipment = facilityForPrompt.equipmentNames.some(
+                (name) => {
+                  const nameLower = name.toLowerCase();
+                  const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 0);
+                  const allWordsFound = nameWords.every((word) => qLower.includes(word));
+                  return allWordsFound || qLower.includes(nameLower);
+                }
+              );
 
               hasEquipmentDecision = deniesEquipment || mentionsAnyEquipment;
             }
@@ -957,56 +986,98 @@ In your reply:
 - Do not create or confirm any booking.
 - Ask the user to choose another date or time.
               `.trim();
-            } else if (!hasDuration || !hasEquipmentDecision) {
-              const availableEquipInline =
+            } else if (hasInvalidDuration) {
+              dynamicContext = `
+Bookings can only be made for **1 hour** or **2 hours**.
+
+You requested a duration that is not allowed. Please specify either 1 hour or 2 hours for your booking.
+              `.trim();
+            } else if (!hasDuration) {
+              // Only duration is missing - ask for it along with equipment choice
+              const equipmentList =
                 facilityForPrompt.equipmentNames.length > 0
-                  ? facilityForPrompt.equipmentNames.join(", ")
+                  ? [...facilityForPrompt.equipmentNames, "No equipment"]
+                      .map((e, i) => `${i + 1}. ${e}`)
+                      .join("\n")
                   : "";
 
-              const availableEquipmentLine =
-                availableEquipInline !== ""
-                  ? `Equipment: ${availableEquipInline}`
-                  : "Equipment: none";
+              const equipmentSection =
+                equipmentList !== ""
+                  ? `**Choose equipment:**\n${equipmentList}`
+                  : "No equipment available (bring your own if needed)";
 
               if (suggestion.isExactMatch) {
                 dynamicContext = `
-Booking details so far
+This is a NEW booking request. No booking has been created yet.
 
+**Booking Details:**
 - Facility: ${suggestion.facilityName}
 - Date: ${formatDateDMY(suggestion.date)}
 - Time: ${suggestion.suggestedTimeLabel}
 - Court: ${suggestion.courtName}
-- ${availableEquipmentLine}
+- Duration: _Not selected yet_
+- Equipment: _Not selected yet_
+
+**Choose duration:** 1 hour or 2 hours
+
+${equipmentSection}
 
 In your reply:
-- Confirm the details above.
-- Ask for duration (1 hour or 2 hours).
-- Ask for equipment from the Equipment line, or "no equipment".
+- Do NOT say the user already has a booking or has booked.
+- Show the Booking Details exactly as above using bullet points.
+- Ask for duration and equipment selection clearly.
+- Format the equipment choices as a numbered list.
                 `.trim();
               } else {
-                const equipmentLineWithLabel =
-                  facilityForPrompt.equipmentNames.length > 0
-                    ? `Equipment: ${facilityForPrompt.equipmentNames.join(
-                        ", "
-                      )}`
-                    : "Equipment: none";
-
                 dynamicContext = `
-That time is not available.
+This is a NEW booking request. No booking has been created yet.
 
-Nearest available slot:
+The requested time is not available.
+
+**Nearest available slot:**
 - Facility: ${suggestion.facilityName}
 - Date: ${formatDateDMY(suggestion.date)}
 - Time: ${suggestion.suggestedTimeLabel}
 - Court: ${suggestion.courtName}
-- ${equipmentLineWithLabel}
+- Duration: _Not selected yet_
+- Equipment: _Not selected yet_
+
+**Choose duration:** 1 hour or 2 hours
+
+${equipmentSection}
 
 In your reply:
+- Do NOT say the user already has a booking or has booked.
 - Ask if they want this suggested time.
-- Ask for duration (1 hour or 2 hours).
-- Ask for equipment from the Equipment line, or "no equipment".
+- Show the details exactly as above using bullet points.
+- Ask for duration and equipment selection clearly.
+- Format the equipment choices as a numbered list.
                 `.trim();
               }
+            } else if (!hasEquipmentDecision && facilityForPrompt.equipmentNames.length > 0) {
+              // Has duration but needs equipment choice - show summary and ask for equipment + confirm
+              const durationLabel =
+                suggestion.durationHours === 2 ? "2 hours" : "1 hour";
+
+              const availableEquipInline = facilityForPrompt.equipmentNames.join(", ");
+
+              dynamicContext = `
+This is a NEW booking request. No booking has been created yet.
+
+Proposed booking:
+- **Facility:** ${suggestion.facilityName}
+- **Date:** ${formatDateDMY(suggestion.date)}
+- **Time:** ${suggestion.suggestedTimeLabel}
+- **Court:** ${suggestion.courtName}
+- **Duration:** ${durationLabel}
+- **Available Equipment:** ${availableEquipInline}
+
+In your reply:
+- Do NOT say the user already has a booking or has already booked.
+- Show the proposed booking details above.
+- Ask which equipment they want from the list above, or "no equipment".
+- Tell them to type **confirm** after choosing equipment to create the booking, or **cancel** to stop.
+              `.trim();
             } else {
               const durationLabel =
                 suggestion.durationHours === 2 ? "2 hours" : "1 hour";
@@ -1018,8 +1089,9 @@ In your reply:
                   : "No equipment";
 
               dynamicContext = `
-Booking summary
+This is a NEW booking request. The slot IS available. No booking has been created yet.
 
+**Booking Details:**
 - **Facility:** ${suggestion.facilityName}
 - **Date:** ${formatDateDMY(suggestion.date)}
 - **Time:** ${suggestion.suggestedTimeLabel}
@@ -1027,7 +1099,12 @@ Booking summary
 - **Duration:** ${durationLabel}
 - **Equipment:** ${chosenEquipInline}
 
-**Next action:** Type **confirm** to create this booking, or **cancel** to stop.
+In your reply:
+- Show ONLY the Booking Details above exactly as formatted.
+- Say: "Type **confirm** to create this booking, or **cancel** to stop."
+- Do NOT add any extra text about availability, other bookings, or suggestions.
+- Do NOT say the slot is not available or that it was taken.
+- Do NOT mention anything about booking again or re-booking.
               `.trim();
             }
           }
