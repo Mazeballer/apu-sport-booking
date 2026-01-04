@@ -11,6 +11,80 @@ import {
 } from "@/lib/ai/facility-fuzzy";
 import { getMalaysiaNow } from "@/lib/ai/chat/route-helpers";
 
+/**
+ * Validate that a parsed hour is within valid 24-hour range (0-23).
+ * Returns true if valid, false if invalid (e.g., "25:00").
+ */
+function isValidHour(hour: number): boolean {
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23;
+}
+
+/**
+ * Parse natural language time expressions like:
+ * - "quarter past 6" → 6:15 → round to 6:00
+ * - "half past 7" → 7:30 → round to 7:00
+ * - "quarter to 8" → 7:45 → round to 8:00
+ * - "2pm-4pm" or "2pm to 4pm" → extract start time 14:00
+ * Returns the hour (0-23) or null if no match.
+ */
+function parseNaturalTime(text: string): { hour: number; hasAmPm: boolean } | null {
+  const t = text.toLowerCase();
+  
+  // Time range patterns: "2pm-4pm", "2pm to 4pm", "14:00-16:00"
+  // Extract the START time from the range
+  const rangeMatch = t.match(
+    /\b((?:[01]?\d|2[0-3])(?::[0-5]\d)?)\s*(am|pm)?\s*(?:-|to)\s*(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(am|pm)?\b/i
+  );
+  if (rangeMatch) {
+    const startHourStr = rangeMatch[1].split(":")[0];
+    let h = parseInt(startHourStr, 10);
+    const startAmPm = rangeMatch[2]?.toLowerCase();
+    const endAmPm = rangeMatch[3]?.toLowerCase();
+    
+    // Use start am/pm if provided, otherwise infer from end am/pm
+    const ampm = startAmPm || endAmPm;
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    
+    return { hour: h, hasAmPm: !!ampm };
+  }
+  
+  // "quarter past X" → X:15 → round to X:00
+  const quarterPastMatch = t.match(/\bquarter\s+past\s+(\d{1,2})\s*(am|pm)?\b/i);
+  if (quarterPastMatch) {
+    let h = parseInt(quarterPastMatch[1], 10);
+    const ampm = quarterPastMatch[2]?.toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    // quarter past X = X:15, we round to X:00
+    return { hour: h, hasAmPm: !!ampm };
+  }
+  
+  // "half past X" → X:30 → round to X:00
+  const halfPastMatch = t.match(/\bhalf\s+past\s+(\d{1,2})\s*(am|pm)?\b/i);
+  if (halfPastMatch) {
+    let h = parseInt(halfPastMatch[1], 10);
+    const ampm = halfPastMatch[2]?.toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    // half past X = X:30, we round to X:00
+    return { hour: h, hasAmPm: !!ampm };
+  }
+  
+  // "quarter to X" → (X-1):45 → round to X:00
+  const quarterToMatch = t.match(/\bquarter\s+to\s+(\d{1,2})\s*(am|pm)?\b/i);
+  if (quarterToMatch) {
+    let h = parseInt(quarterToMatch[1], 10);
+    const ampm = quarterToMatch[2]?.toLowerCase();
+    if (ampm === "pm" && h < 12) h += 12;
+    if (ampm === "am" && h === 12) h = 0;
+    // quarter to X = (X-1):45, we round UP to X:00
+    return { hour: h, hasAmPm: !!ampm };
+  }
+  
+  return null;
+}
+
 export type BookingSuggestion = {
   facilityId: string;
   facilityName: string;
@@ -221,36 +295,48 @@ export async function getBookingSuggestionFromQuestion(
     };
   }
 
-  // First, prefer explicit times with am/pm like "8am", "8 pm", "10:30am"
+  // First, try natural language patterns (quarter past, half past, quarter to, time ranges)
   let hour: number | null = null;
-
-  const timeWithAmPmMatch = questionText.match(
-    /\b(?:at\s*)?((?:[01]?\d|2[0-3])(?::([0-5]\d))?)\s*(am|pm)\b/i
-  );
-
-  if (timeWithAmPmMatch) {
-    const rawHour = parseInt(timeWithAmPmMatch[1].split(":")[0].trim(), 10);
-    const minutesPart = timeWithAmPmMatch[2];
-    const ampm = timeWithAmPmMatch[3].toLowerCase();
-
-    let h = rawHour;
-    const m = minutesPart ? parseInt(minutesPart, 10) : 0;
-
-    if (ampm === "pm" && h < 12) h += 12;
-    if (ampm === "am" && h === 12) h = 0;
-
+  
+  const naturalTime = parseNaturalTime(questionText);
+  if (naturalTime) {
+    let h = naturalTime.hour;
+    
+    // If no explicit AM/PM in natural time, apply smart inference
+    if (!naturalTime.hasAmPm && h >= 1 && h <= 12) {
+      const now = getMalaysiaNow();
+      const currentHour = now.getHours();
+      
+      const amOption = h === 12 ? 0 : h;
+      const pmOption = h === 12 ? 12 : h + 12;
+      
+      const amInFuture = amOption >= currentHour;
+      const pmInFuture = pmOption >= currentHour;
+      
+      if (amInFuture && pmInFuture) {
+        const amDiff = amOption - currentHour;
+        const pmDiff = pmOption - currentHour;
+        h = amDiff <= pmDiff ? amOption : pmOption;
+      } else if (pmInFuture) {
+        h = pmOption;
+      } else if (amInFuture) {
+        h = amOption;
+      } else {
+        h = pmOption;
+      }
+    }
+    
     hour = h;
-
     const roundedLabel = `${h.toString().padStart(2, "0")}:00`;
     requestedTimeLabel = roundedLabel;
-
+    
     if (freeSlots.includes(roundedLabel)) {
       suggestedTimeLabel = roundedLabel;
       isExactMatch = true;
     } else {
       let best = freeSlots[0];
       let bestDiff = Number.POSITIVE_INFINITY;
-
+      
       for (const slot of freeSlots) {
         const slotHour = parseInt(slot.slice(0, 2), 10);
         const diff = Math.abs(slotHour - h);
@@ -259,22 +345,79 @@ export async function getBookingSuggestionFromQuestion(
           best = slot;
         }
       }
-
+      
       suggestedTimeLabel = best;
       isExactMatch = false;
     }
-  } else {
-    // If no am/pm, try a time after the word "at", like "at 8" or "at 18:00"
+  }
+
+  // Next, prefer explicit times with am/pm like "8am", "8 pm", "10:30am"
+  if (hour === null) {
+    // Stricter pattern: captures hour in group 1, minutes in group 2, am/pm in group 3
+    const timeWithAmPmMatch = questionText.match(
+      /\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i
+    );
+
+    if (timeWithAmPmMatch) {
+      const rawHour = parseInt(timeWithAmPmMatch[1], 10);
+      const minutesPart = timeWithAmPmMatch[2];
+      const ampm = timeWithAmPmMatch[3].toLowerCase();
+
+      // Validate: for am/pm format, hour should be 1-12
+      if (rawHour < 1 || rawHour > 12) {
+        // Invalid hour for am/pm format (e.g., "25pm"), skip this match
+      } else {
+        let h = rawHour;
+        const m = minutesPart ? parseInt(minutesPart, 10) : 0;
+
+        if (ampm === "pm" && h < 12) h += 12;
+        if (ampm === "am" && h === 12) h = 0;
+
+        hour = h;
+
+      const roundedLabel = `${h.toString().padStart(2, "0")}:00`;
+      requestedTimeLabel = roundedLabel;
+
+      if (freeSlots.includes(roundedLabel)) {
+        suggestedTimeLabel = roundedLabel;
+        isExactMatch = true;
+      } else {
+        let best = freeSlots[0];
+        let bestDiff = Number.POSITIVE_INFINITY;
+
+        for (const slot of freeSlots) {
+          const slotHour = parseInt(slot.slice(0, 2), 10);
+          const diff = Math.abs(slotHour - h);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            best = slot;
+          }
+        }
+
+        suggestedTimeLabel = best;
+        isExactMatch = false;
+      }
+      }
+    }
+  }
+  
+  // If still no match, try a time after the word "at", like "at 8" or "at 18:00"
+  if (hour === null) {
+    // Captures hour in group 1, minutes in group 2
     const atTimeMatch = questionText.match(
-      /\bat\s+((?:[01]?\d|2[0-3])(?::([0-5]\d))?)\b/i
+      /\bat\s+(\d{1,2})(?::(\d{2}))?\b/i
     );
 
     if (atTimeMatch) {
-      const rawHour = parseInt(atTimeMatch[1].split(":")[0].trim(), 10);
+      const rawHour = parseInt(atTimeMatch[1], 10);
       const minutesPart = atTimeMatch[2];
-
-      let h = rawHour;
       const m = minutesPart ? parseInt(minutesPart, 10) : 0;
+
+      // Validate: reject invalid hours (>= 24) or minutes (>= 60)
+      if (!isValidHour(rawHour) || (minutesPart && m >= 60)) {
+        // Invalid time like "25:00", skip this match
+      } else {
+        let h = rawHour;
 
       // Smart AM/PM inference for ambiguous times (1-12 without AM/PM)
       // If rawHour is already >= 13, it's clearly 24h format
@@ -332,15 +475,22 @@ export async function getBookingSuggestionFromQuestion(
         suggestedTimeLabel = best;
         isExactMatch = false;
       }
-    } else {
-      // Fallback to chrono only if we did not find any explicit time
-      const parsedDate = chrono.parseDate(
-        questionText,
-        new Date(requestedDate + "T12:00")
-      );
+      }
+    }
+  }
 
-      if (parsedDate) {
-        const h = parsedDate.getHours();
+  // Fallback to chrono only if we did not find any explicit time
+  if (hour === null) {
+    const parsedDate = chrono.parseDate(
+      questionText,
+      new Date(requestedDate + "T12:00")
+    );
+
+    if (parsedDate) {
+      const h = parsedDate.getHours();
+      // Validate chrono parsed hour
+      if (isValidHour(h)) {
+        hour = h;
         const label = `${h.toString().padStart(2, "0")}:00`;
         requestedTimeLabel = label;
 
