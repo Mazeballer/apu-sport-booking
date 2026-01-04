@@ -9,6 +9,7 @@ import {
   findBestMatchingFacility,
   type FacilityForMatch,
 } from "@/lib/ai/facility-fuzzy";
+import { getMalaysiaNow } from "@/lib/ai/chat/route-helpers";
 
 export type BookingSuggestion = {
   facilityId: string;
@@ -278,7 +279,7 @@ export async function getBookingSuggestionFromQuestion(
       // Smart AM/PM inference for ambiguous times (1-12 without AM/PM)
       // If rawHour is already >= 13, it's clearly 24h format
       if (rawHour >= 1 && rawHour <= 12) {
-        const now = new Date();
+        const now = getMalaysiaNow();
         const currentHour = now.getHours();
 
         // Two possibilities: rawHour as-is (AM), or rawHour + 12 (PM)

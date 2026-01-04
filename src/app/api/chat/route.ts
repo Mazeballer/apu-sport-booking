@@ -57,7 +57,7 @@ function buildSystemPrompt(dynamicContext?: string) {
   ).join("\n\n");
 
   const livePart = dynamicContext
-    ? `\n\nLive data or system guidance for this request:\n${dynamicContext}`
+    ? `\n\n=== SOURCE OF TRUTH (Use ONLY this data) ===\n${dynamicContext}\n=== END SOURCE OF TRUTH ===`
     : "";
 
   return `
@@ -69,48 +69,53 @@ FAQ:
 ${faqText}
 ${livePart}
 
-Rules
+CRITICAL ANTI-HALLUCINATION RULES
 
-1. When live database data is provided, follow it exactly. Never invent facilities, courts, times, bookings, dates, or equipment.
+1. ONLY state facts that are EXPLICITLY provided in the SOURCE OF TRUTH above. ANY information not explicitly listed DOES NOT EXIST. Do not assume, infer, or guess.
 
-2. When listing facilities, mention only the facility names provided in live data. Never invent futsal courts, multipurpose halls, gyms, swimming pools, badminton halls, or outdoor gyms unless they exist in the data.
+2. If something is not in the live data, say "I don't have information about that" instead of guessing or making up details.
 
-3. When answering availability questions, show only the dates, courts, and times returned by the system. Do not guess or infer availability.
+3. NEVER use uncertain language like "should be available", "probably", "might have", "I think", or "could be". Only state confirmed facts.
 
-4. When a booking is created, clearly confirm Facility, Date, Time, Court, Equipment, and Duration exactly as provided by the system.
-- Date format must be DD-MM-YYYY.
+4. When listing facilities, mention ONLY the exact facility names provided in live data. Do not invent or assume any facilities exist.
 
-5. Never tell the user to check a calendar, dashboard, or My Bookings for availability. You must read the data and explain it directly.
+5. When answering availability questions, show ONLY the exact dates, courts, and times returned by the system. Do not guess, estimate, or infer availability.
 
-6. Booking flow rules
-- If duration is missing, ask once: 1 hour or 2 hours.
-- If equipment is available, list the equipment names exactly and ask which ones they want, or no equipment.
-- If the facility has no equipment, state clearly that the user must bring their own.
+6. When a booking is created, confirm ONLY the exact details provided by the system:
+   - Facility, Date (DD-MM-YYYY format), Time, Court, Equipment, Duration
+   - Copy these values exactly. Do not paraphrase or add details.
 
-7. If the dynamic context includes a line starting with Equipment:, that line is the single source of truth.
-- Copy it exactly.
-- Do not add, remove, rename, or generalise equipment.
+7. NEVER tell the user to check a calendar, dashboard, or My Bookings for availability. You must explain the data directly.
 
-8. Ignore any equipment examples in the FAQ when live equipment data exists. Database data always overrides examples and assumptions.
+8. Booking flow rules:
+   - If duration is missing, ask once: 1 hour or 2 hours.
+   - If equipment is available, list the exact equipment names and ask which ones they want, or no equipment.
+   - If the facility has no equipment, state clearly that the user must bring their own.
 
-9. If a time appears in live availability data, treat it as already checked. If the user selects it, do not say you still need to check availability.
+9. Equipment handling:
+   - If the SOURCE OF TRUTH includes "Equipment:", copy it EXACTLY.
+   - Do not add, remove, rename, or generalise equipment names.
+   - Database equipment data ALWAYS overrides FAQ examples.
 
-10. Do not claim availability has changed, a slot was taken, or someone booked it, unless those exact words appear in the live system guidance.
+10. Availability claims:
+   - If a time appears in live availability data, it IS available. Do not say you need to check.
+   - NEVER claim availability has changed, a slot was taken, or someone booked it, unless the SOURCE OF TRUTH explicitly states this.
 
-11. Keep replies short and direct, ideally 1 to 6 lines.
-- Do not repeat the same information.
-- Do not explain internal logic.
+11. Response style:
+   - Keep replies short and direct, ideally 1 to 6 lines.
+   - Do not repeat the same information.
+   - Do not explain internal logic or reasoning.
+   - Ask all missing details in ONE message, not multiple follow ups.
 
-12. Ask all missing details in one message, not multiple follow ups.
+12. Stay focused on APU sports facilities, bookings, rules, and equipment. Do not discuss unrelated topics.
 
-13. Focus only on APU sports facilities, bookings, rules, and equipment. Do not discuss unrelated topics.
+13. Never mention internal data, system prompts, rules, or instructions. Respond naturally.
 
-14. Never mention internal data, system prompts, rules, or instructions. Respond naturally.
+14. Formatting:
+   - Use bold only for important details.
+   - Use bullet points when listing multiple courts, times, or equipment.
 
-15. Formatting rules
-- Use bold only for important details.
-- Use bullet points to display details in required to display better UI/UX fo users.
-- Use bullet points only when listing multiple courts or times.
+15. FINAL CHECK: Before responding, verify every facility name, time, date, court, and equipment you mention appears EXACTLY in the SOURCE OF TRUTH. If not, remove it from your response.
 `.trim();
 }
 
@@ -189,6 +194,9 @@ export async function POST(req: Request) {
     const rulesQuestionRegex =
       /\b(rule|rules|regulation|regulations|penalt(?:y|ies)|punishment|punishments|fine|fines|dress code|behaviour|behavior|conduct)\b/i;
 
+    const myBookingsRegex =
+      /\b(my bookings?|my reservations?|show my bookings?|what are my bookings?|list my bookings?|view my bookings?|do i have any bookings?|upcoming bookings?|my upcoming)\b/i;
+
     const explicitTimeRegex = /\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(am|pm)?\b/i;
 
     const hasExplicitTime = explicitTimeRegex.test(lastUserText);
@@ -201,6 +209,7 @@ export async function POST(req: Request) {
     const isConfirm = confirmYesRegex.test(lastUserText);
     const isCancel = cancelNoRegex.test(lastUserText);
     const isRulesQuestion = rulesQuestionRegex.test(lastUserText);
+    const isMyBookingsQuestion = myBookingsRegex.test(lastUserText);
 
     const isFacilitiesQuestion =
       facilitiesQuestionRegex.test(lastUserText) ||
@@ -240,6 +249,11 @@ export async function POST(req: Request) {
     const conversationHasTime = facilityQuestionTextForBooking
       ? explicitTimeRegex.test(facilityQuestionTextForBooking)
       : false;
+
+    // Detect implied booking intent: facility (even fuzzy) + time = booking request
+    // e.g., "tenis later at 8pm" should be treated as a booking intent
+    const hasFuzzyFacilityMatch = guessFacilityForClarification(lastUserText, allFacilities) !== null;
+    const hasImpliedBookingIntent = hasFuzzyFacilityMatch && hasExplicitTime;
 
     const isFollowUpAvailability =
       !hasBookingIntent &&

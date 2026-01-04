@@ -22,7 +22,7 @@ const SUGGESTED_QUESTIONS = [
   "What facilities are available to book?",
   "How to install PWA on my device?",
   "How do I cancel a booking?",
-  "List Facilities",
+  "Show my bookings",
 ];
 
 type Suggestion = { label: string; text: string };

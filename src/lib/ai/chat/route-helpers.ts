@@ -81,7 +81,7 @@ export function normalizeText(text: string): string {
 export function isDateOnlyMessage(text: string): boolean {
   const t = normalizeText(text);
 
-  if (t === "today" || t === "tomorrow" || t === "yesterday") return true;
+  if (t === "today" || t === "tomorrow" || t === "yesterday" || t === "later" || t === "later today") return true;
 
   if (
     t === "monday" ||
@@ -256,9 +256,16 @@ export function getLastUserText(messages: UIMessage[]): string | undefined {
 
 export function extractDate(text: string, refDate: Date): string | null {
   const raw = text.trim();
+  const lower = text.toLowerCase().trim();
+
+  // Handle "later" and "later today" - treat as today
+  // Works both as standalone and as part of a sentence like "tenis later at 8pm"
+  if (/\blater\b/.test(lower)) {
+    return refDate.toISOString().split("T")[0];
+  }
 
   // Manual DD-MM-YYYY or DD/MM/YYYY
-  const dmy = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if (dmy) {
     const day = String(Number(dmy[1])).padStart(2, "0");
     const month = String(Number(dmy[2])).padStart(2, "0");
@@ -272,10 +279,8 @@ export function extractDate(text: string, refDate: Date): string | null {
     }
   }
 
-  const lower = text.toLowerCase();
-
   const hasDateHint =
-    /(today|tomorrow|yesterday|next|this|on\s+\d{1,2}\b|monday|tuesday|wednesday|thursday|friday|saturday|sunday|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i.test(
+    /(today|tomorrow|yesterday|later|next|this|on\s+\d{1,2}\b|monday|tuesday|wednesday|thursday|friday|saturday|sunday|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/i.test(
       lower
     );
 
@@ -509,9 +514,15 @@ export function getLastFacilityIdFromConversation(
     if (!text) continue;
 
     const lower = text.toLowerCase();
+    
+    // First try exact match
     for (const f of facilityTokenMap) {
       if (f.tokens.some((t) => t && lower.includes(t))) return f.id;
     }
+    
+    // Then try fuzzy match for typos like "tenis" -> "Tennis"
+    const fuzzyGuess = guessFacilityForClarification(text, facilities);
+    if (fuzzyGuess) return fuzzyGuess.id;
   }
 
   return null;
