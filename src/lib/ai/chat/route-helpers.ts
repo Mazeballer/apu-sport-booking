@@ -577,3 +577,35 @@ export function findFacilityExact(
 
   return null;
 }
+
+/**
+ * Extract the last proposed booking time from assistant messages.
+ * Looks for patterns like "Time: 20:00" or "Time: ${time}" in recent assistant messages.
+ * Returns the time in "HH:MM" format or null if not found.
+ */
+export function getLastProposedTimeFromConversation(
+  messages: UIMessage[]
+): string | null {
+  // Look for assistant messages in reverse order (most recent first)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "assistant") continue;
+
+    // Extract text from message parts
+    let text = "";
+    for (const part of msg.parts) {
+      if (part.type === "text") {
+        text += part.text + " ";
+      }
+    }
+
+    // Look for "Time: HH:MM" pattern (with or without markdown bold)
+    const timeMatch = text.match(/\*?\*?Time\*?\*?:?\s*\*?\*?(\d{1,2}:\d{2})/i);
+    if (timeMatch) {
+      return timeMatch[1];
+    }
+  }
+
+  return null;
+}
+

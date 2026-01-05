@@ -38,9 +38,30 @@ import {
   isDateOnlyMessage,
   getLastFacilityIdFromConversation,
   formatDateDMY,
+  getLastProposedTimeFromConversation,
 } from "@/lib/ai/chat/route-helpers";
+import {
+  templateBookingConfirmed,
+  templateBookingFailed,
+  templateBookingLimitExceeded,
+  templateBookingCancelled,
+  templateConfirmBooking,
+  templateAskDuration,
+  templateSlotUnavailable,
+} from "@/lib/ai/chat/response-templates";
 
 export const runtime = "nodejs";
+
+/**
+ * Helper to properly escape text for the AI stream format.
+ * Uses JSON.stringify to handle all special characters correctly.
+ */
+function escapeForAIStream(text: string): string {
+  // JSON.stringify handles all escaping, then we remove the outer quotes
+  const escaped = JSON.stringify(text);
+  // Remove the surrounding quotes that JSON.stringify adds
+  return escaped.slice(1, -1);
+}
 
 const groq = createOpenAI({
   apiKey: process.env.GROQ_API_KEY,
@@ -184,6 +205,10 @@ export async function POST(req: Request) {
     const availabilityRegex =
       /\b(available|free|slot|time|when can i book|what time|what about)\b/i;
 
+    // Detect explicit request to show all available time slots
+    const showAllSlotsRegex =
+      /\b(show|list|what are|tell me|give me|what other|any other|other available|other time|other slot).*(time|slot|hour|available|availability)?\b/i;
+
     const bookingIntentRegex =
       /\b(book|reserve|schedule|help me book|make a booking)\b/i;
 
@@ -201,6 +226,7 @@ export async function POST(req: Request) {
 
     const hasExplicitTime = explicitTimeRegex.test(lastUserText);
     const hasAvailabilityKeyword = availabilityRegex.test(lastUserText);
+    const isShowAllSlotsRequest = showAllSlotsRegex.test(lastUserText) && !hasExplicitTime;
 
     const hasRegexBookingIntent = bookingIntentRegex.test(lastUserText);
     const hasFuzzyBookingIntent = hasFuzzyBookingIntentWord(lastUserText);
@@ -254,6 +280,16 @@ export async function POST(req: Request) {
     // e.g., "tenis later at 8pm" should be treated as a booking intent
     const hasFuzzyFacilityMatch = guessFacilityForClarification(lastUserText, allFacilities) !== null;
     const hasImpliedBookingIntent = hasFuzzyFacilityMatch && hasExplicitTime;
+
+    // Detect time change request in active booking flow
+    // e.g., "6pm instead", "give me 6pm", "what about 7pm", "can I have 5pm", "book 8pm", "can i book 8pm one"
+    const timeChangePattern = /\b(instead|give me|what about|how about|can i have|can i get|i want|i prefer|change to|switch to|book|can i book|i'll take|take the|that one)\b/i;
+    const isTimeOnlyMessage = lastUserText.match(/^\s*\d{1,2}\s*(am|pm)?\s*(one|slot|please)?\s*$/i);
+    const isTimeChangeRequest = 
+      hasExplicitTime && 
+      isBookingConversation &&
+      !facilityTokens.some((t) => lastUserText.toLowerCase().includes(t)) && // No facility mentioned = changing time only
+      (timeChangePattern.test(lastUserText) || isTimeOnlyMessage);
 
     const isFollowUpAvailability =
       !hasBookingIntent &&
@@ -383,6 +419,16 @@ You requested a duration that is not allowed. Please specify either 1 hour or 2 
                 requestedDate: requestedDateIso,
               });
 
+              // Override the suggested time with the last proposed time from the conversation
+              // This ensures we use the time the user agreed to confirm, not the re-parsed time
+              if (suggestion) {
+                const lastProposedTime = getLastProposedTimeFromConversation(uiMessages);
+                if (lastProposedTime) {
+                  suggestion.suggestedTimeLabel = lastProposedTime;
+                  suggestion.isExactMatch = true; // Treat as exact match since user confirmed this time
+                }
+              }
+
               if (!suggestion) {
                 dynamicContext =
                   "I could not find any active facility matching your booking request.";
@@ -413,88 +459,58 @@ You requested a duration that is not allowed. Please specify either 1 hour or 2 
                       ? e.message
                       : "Booking could not be created. Please try again.";
 
+                  // Set dynamicContext so LLM can respond properly
                   dynamicContext = `
-Booking could not be created.
+**Booking Limit Reached**
 
-System reason:
 ${msg}
 
 In your reply:
-- Say the booking was not created.
-- Explain the limit briefly using the system reason above.
-- Ask the user to cancel an existing booking or pick another date/time.
+- Inform the user they have reached their booking limit.
+- Suggest they cancel an existing booking or try a different date.
+- Do NOT try to create the booking.
                   `.trim();
-
-                  const result = streamText({
-                    model: groq(
-                      process.env.GROQ_MODEL ?? "llama-3.1-8b-instant"
-                    ),
-                    system: buildSystemPrompt(dynamicContext),
-                    messages: convertToModelMessages(uiMessages),
-                    temperature: 0,
-                  });
-
-                  return result.toUIMessageStreamResponse();
                 }
 
-                const result = await createBookingFromAI(suggestion);
+                // Only proceed with booking if limit check passed
+                if (!dynamicContext) {
+                  const result = await createBookingFromAI(suggestion);
 
-                if (!result.ok) {
-                  const equipmentInlineFromFacility =
-                    facilityForPrompt.equipmentNames.length > 0
-                      ? facilityForPrompt.equipmentNames.join(", ")
-                      : "";
+                  if (!result.ok) {
+                    // Booking failed - use dynamicContext for proper response
+                    dynamicContext = `
+❌ **Booking Failed**
 
-                  const equipmentLine =
-                    equipmentInlineFromFacility !== ""
-                      ? `Equipment: ${equipmentInlineFromFacility}`
-                      : "Equipment: none";
-
-                  dynamicContext = `
-Booking could not be created.
-
-System reason:
 ${result.message}
 
-${equipmentLine}
+Please choose another time or check availability again.
+                    `.trim();
+                  } else {
+                    // Booking succeeded!
+                    const finalEquipInline =
+                      result.equipmentNames && result.equipmentNames.length > 0
+                        ? result.equipmentNames.join(", ")
+                        : "None";
+
+                    const durationLabel =
+                      suggestion.durationHours === 2 ? "2 hours" : "1 hour";
+
+                    dynamicContext = `
+✅ **Booking Confirmed**
+
+• **Facility:** ${result.facilityName}
+• **Date:** ${formatDateDMY(result.date)}
+• **Time:** ${result.timeLabel}
+• **Court:** ${result.courtName}
+• **Duration:** ${durationLabel}
+• **Equipment:** ${finalEquipInline}
 
 In your reply:
-- Briefly explain that the booking could not be created using the system reason above.
-- Do not invent stories such as "someone just took the slot".
-- Do not invent new times or equipment.
-- Ask the user to choose another time or check availability again.
-                  `.trim();
-                } else {
-                  const finalEquipInline =
-                    result.equipmentNames && result.equipmentNames.length > 0
-                      ? result.equipmentNames.join(", ")
-                      : "";
-
-                  const equipmentLineForUser =
-                    finalEquipInline !== ""
-                      ? `Equipment: ${finalEquipInline}`
-                      : "Equipment: none";
-
-                  const durationLabel =
-                    suggestion.durationHours === 2 ? "2 hours" : "1 hour";
-
-                  dynamicContext = `
-Booking confirmed.
-
-- Facility: ${result.facilityName}
-- Date: ${formatDateDMY(result.date)}
-- Time: ${result.timeLabel}
-- Court: ${result.courtName}
-- Duration: ${durationLabel}
-- ${equipmentLineForUser}
-
-${equipmentLineForUser}
-
-In your reply:
-- Confirm the details exactly.
-- When mentioning equipment, copy the Equipment line exactly.
-- Remind the user to arrive on time and follow any facility rules.
-                  `.trim();
+- Confirm the booking was successful.
+- Show the details exactly as listed above.
+- Remind the user to arrive on time and follow facility rules.
+                    `.trim();
+                  }
                 }
               }
             }
@@ -505,7 +521,74 @@ In your reply:
 
     /* 2. Cancellation replies */
     if (!dynamicContext && isCancel) {
-      dynamicContext = "Okay, I will not create any booking.";
+      // Use templated response for cancellation - bypass LLM
+      const templateResponse = templateBookingCancelled();
+
+      return new Response(
+        `0:"${escapeForAIStream(templateResponse)}"\n`,
+        {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "X-Vercel-AI-Data-Stream": "v1",
+          },
+        }
+      );
+    }
+
+    /* 2.5 Show all available time slots during booking flow */
+    if (!dynamicContext && isShowAllSlotsRequest && isBookingConversation) {
+      const lastFacilityId = getLastFacilityIdFromConversation(uiMessages, allFacilities);
+      const lastFacility = lastFacilityId
+        ? allFacilities.find((f) => f.id === lastFacilityId)
+        : null;
+
+      if (lastFacility) {
+        const requestedDateIso = getRequestedDateFromConversation(
+          uiMessages,
+          lastUserText,
+          todayIso
+        );
+
+        const data = await getFacilityAvailabilityById(lastFacility.id, requestedDateIso);
+
+        if (data) {
+          const { facility, courts, bookings, date } = data;
+          const dateDmy = formatDateDMY(date);
+          const nowMy = getMalaysiaNow();
+
+          const lines: string[] = [];
+
+          for (const court of courts) {
+            const courtBookings = bookings.filter((b) => b.courtId === court.id);
+
+            const openTime = facility.openTime ?? "08:00";
+            const closeTime = facility.closeTime ?? "22:00";
+
+            const free = computeFreeHours(
+              openTime,
+              closeTime,
+              date,
+              courtBookings,
+              nowMy,
+              1
+            );
+
+            if (free.length === 0) continue;
+
+            lines.push(`**${court.name}:**\n${free.map((t) => `• ${t}`).join("\n")}`);
+          }
+
+          if (lines.length === 0) {
+            dynamicContext = `📅 **${facility.name}** on ${dateDmy}\n\nNo available slots remaining for this date. Please try another date.`;
+          } else {
+            dynamicContext = `📅 **${facility.name}** on ${dateDmy}\n\n${lines.join("\n\n")}\n\nReply with a time, duration (1 or 2 hours), and equipment choice to book.`;
+          }
+        } else {
+          dynamicContext = `I couldn't retrieve availability for ${lastFacility.name}. Please try again.`;
+        }
+      } else {
+        dynamicContext = `I'm not sure which facility you're asking about. Please specify the facility name.`;
+      }
     }
 
     /* 3. List facilities */
@@ -880,7 +963,7 @@ In your reply:
     const shouldHandleBookingWithTime =
       !dynamicContext &&
       !isFacilitiesQuestion &&
-      (hasBookingIntent || isBookingConversation) &&
+      (hasBookingIntent || isBookingConversation || isTimeChangeRequest) &&
       (hasExplicitTime ||
         explicitInLastBookingQuestion ||
         (hasBookingIntent && conversationHasTime)) &&
@@ -896,14 +979,33 @@ In your reply:
       );
       const requestedDateDmy = formatDateDMY(requestedDateIso);
 
-      const facilityQuestionText =
-        facilityQuestionTextForBooking ??
-        resolveFacilityAwareQuestionText(
-          uiMessages,
-          facilityTokens,
-          allFacilities,
-          lastUserText
-        );
+      // For time change requests, build a fresh question using facility from context + new time
+      let facilityQuestionText: string | undefined;
+      
+      if (isTimeChangeRequest) {
+        // Get facility from conversation, but use ONLY the current message's time
+        const lastFacilityId = getLastFacilityIdFromConversation(uiMessages, allFacilities);
+        const lastFacility = lastFacilityId 
+          ? allFacilities.find((f) => f.id === lastFacilityId) 
+          : null;
+        
+        if (lastFacility) {
+          // Build question text with facility name + current message (which has the new time)
+          facilityQuestionText = `${lastFacility.name} ${lastUserText}`;
+        }
+      }
+      
+      // If not a time change request (or no facility found), use normal resolution
+      if (!facilityQuestionText) {
+        facilityQuestionText =
+          facilityQuestionTextForBooking ??
+          resolveFacilityAwareQuestionText(
+            uiMessages,
+            facilityTokens,
+            allFacilities,
+            lastUserText
+          );
+      }
 
       if (
         !facilityQuestionText ||
@@ -966,9 +1068,12 @@ Example:
             if (facilityForPrompt.equipmentNames.length === 0) {
               hasEquipmentDecision = true;
             } else {
+              // Check both facility question text AND current message for equipment decisions
+              const textToCheck = `${qLower} ${lastUserText.toLowerCase()}`;
+              
               const deniesEquipment =
-                /\b(no equipment|no need equipment|do not need equipment|dont need equipment|none\b|nothing\b)\b/i.test(
-                  qLower
+                /\b(no equipment|no need equipment|do not need equipment|dont need equipment|with no equipment|without equipment|none\b|nothing\b)\b/i.test(
+                  textToCheck
                 );
 
               // Check if any equipment is mentioned (using word-based matching)
@@ -976,8 +1081,8 @@ Example:
                 (name) => {
                   const nameLower = name.toLowerCase();
                   const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 0);
-                  const allWordsFound = nameWords.every((word) => qLower.includes(word));
-                  return allWordsFound || qLower.includes(nameLower);
+                  const allWordsFound = nameWords.every((word) => textToCheck.includes(word));
+                  return allWordsFound || textToCheck.includes(nameLower);
                 }
               );
 
@@ -1043,29 +1148,32 @@ In your reply:
 - Format the equipment choices as a numbered list.
                 `.trim();
               } else {
+                // Requested time is not available - show clear message with alternatives
+                // We need to get the available times from the booking suggestion data
+                const requestedTimeDisplay = suggestion.requestedTimeLabel ?? "the requested time";
+                
                 dynamicContext = `
-This is a NEW booking request. No booking has been created yet.
+The **${requestedTimeDisplay}** slot is already booked.
 
-The requested time is not available.
+**Nearest available time:** ${suggestion.suggestedTimeLabel}
 
-**Nearest available slot:**
+📋 **Suggested Booking:**
 - Facility: ${suggestion.facilityName}
 - Date: ${formatDateDMY(suggestion.date)}
 - Time: ${suggestion.suggestedTimeLabel}
 - Court: ${suggestion.courtName}
-- Duration: _Not selected yet_
-- Equipment: _Not selected yet_
-
-**Choose duration:** 1 hour or 2 hours
 
 ${equipmentSection}
 
+If you want **${suggestion.suggestedTimeLabel}**, reply with your preferred duration (1 or 2 hours) and equipment choice.
+
+If you want a **different time**, just tell me the time you prefer and I'll check if it's available.
+
 In your reply:
-- Do NOT say the user already has a booking or has booked.
-- Ask if they want this suggested time.
-- Show the details exactly as above using bullet points.
-- Ask for duration and equipment selection clearly.
-- Format the equipment choices as a numbered list.
+- Clearly state that the requested time (${requestedTimeDisplay}) is already booked.
+- Offer the suggested time ${suggestion.suggestedTimeLabel} as an alternative.
+- Ask if they want the suggested time OR let them specify a different time.
+- Do NOT create any booking yet.
                 `.trim();
               }
             } else if (!hasEquipmentDecision && facilityForPrompt.equipmentNames.length > 0) {
