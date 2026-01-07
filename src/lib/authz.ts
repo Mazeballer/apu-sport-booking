@@ -19,7 +19,6 @@ export async function requireStaffOrAdmin() {
   return user;
 }
 
-// 👇 Add this for admin-only enforcement
 export async function requireAdmin() {
   const supabase = await createServerSupabase();
   const { data } = await supabase.auth.getUser();
