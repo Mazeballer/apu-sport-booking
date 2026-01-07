@@ -89,7 +89,19 @@ export async function issueEquipmentFromCounter(input: {
 
       if (delta === 0) {
         // Same quantity, but we still need to set issuedAt if not already set
+        // AND decrement inventory if this is the first time issuing
         if (existing && !existing.issuedAt) {
+          // Check inventory availability
+          if (eq.qtyAvailable < nextQty) {
+            throw new Error(`Not enough ${eq.name} available`);
+          }
+          
+          // Decrement inventory for first-time issue
+          await tx.equipment.update({
+            where: { id: eq.id },
+            data: { qtyAvailable: { decrement: nextQty } },
+          });
+          
           await tx.equipmentRequestItem.update({
             where: { id: existing.id },
             data: {
@@ -194,16 +206,14 @@ export async function returnEquipmentFromCounter(input: {
           qtyAvailable: { increment: qty },
         },
       });
-    } else if (input.condition === "lost") {
+    } else if (input.condition === "lost" || input.condition === "damaged" || input.condition === "not_returned") {
+      // Lost, damaged, and not_returned items are removed from total inventory
       await tx.equipment.update({
         where: { id: item.equipmentId },
         data: {
           qtyTotal: { decrement: qty },
         },
       });
-    } else {
-      // damaged / not_returned -> no inventory change here
-      // (if you want damaged to reduce qtyTotal, add that rule explicitly)
     }
 
     const newQtyReturned = item.qtyReturned + qty;
