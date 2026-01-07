@@ -20,6 +20,8 @@ import {
   ArrowLeftRightIcon,
 } from "lucide-react";
 
+export const revalidate = 0;
+
 export default async function StaffPage() {
   await requireStaffOrAdmin();
 

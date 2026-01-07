@@ -88,7 +88,16 @@ export async function issueEquipmentFromCounter(input: {
       }
 
       if (delta === 0) {
-        // already issued this qty for this equipment, idempotent no-op
+        // Same quantity, but we still need to set issuedAt if not already set
+        if (existing && !existing.issuedAt) {
+          await tx.equipmentRequestItem.update({
+            where: { id: existing.id },
+            data: {
+              issuedAt: new Date(),
+              dismissed: false,
+            },
+          });
+        }
         continue;
       }
 
