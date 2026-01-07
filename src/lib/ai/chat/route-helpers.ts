@@ -609,3 +609,35 @@ export function getLastProposedTimeFromConversation(
   return null;
 }
 
+/**
+ * Extract the last proposed booking date from assistant messages.
+ * Looks for patterns like "Date: 09-01-2026" or "Date: ${date}" in recent assistant messages.
+ * Returns the date in "YYYY-MM-DD" ISO format or null if not found.
+ */
+export function getLastProposedDateFromConversation(
+  messages: UIMessage[]
+): string | null {
+  // Look for assistant messages in reverse order (most recent first)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "assistant") continue;
+
+    // Extract text from message parts
+    let text = "";
+    for (const part of msg.parts) {
+      if (part.type === "text") {
+        text += part.text + " ";
+      }
+    }
+
+    // Look for "Date: DD-MM-YYYY" pattern (with or without markdown bold)
+    const dateMatch = text.match(/\*?\*?Date\*?\*?:?\s*\*?\*?(\d{1,2}-\d{1,2}-\d{4})/i);
+    if (dateMatch) {
+      // Convert DD-MM-YYYY to YYYY-MM-DD (ISO format)
+      const [dd, mm, yyyy] = dateMatch[1].split("-");
+      return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+    }
+  }
+
+  return null;
+}

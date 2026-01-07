@@ -39,6 +39,7 @@ import {
   getLastFacilityIdFromConversation,
   formatDateDMY,
   getLastProposedTimeFromConversation,
+  getLastProposedDateFromConversation,
 } from "@/lib/ai/chat/route-helpers";
 import {
   templateBookingConfirmed,
@@ -299,11 +300,18 @@ export async function POST(req: Request) {
 
     /* 1. Explicit confirmation "confirm" */
     if (isConfirm) {
-      const requestedDateIso = getRequestedDateFromConversation(
-        uiMessages,
-        lastUserText,
-        todayIso
-      );
+      // First try to get the date from the last assistant proposal (what user saw)
+      // This ensures we use the date the user agreed to, not re-parse from messages
+      let requestedDateIso = getLastProposedDateFromConversation(uiMessages);
+      
+      // Fallback to parsing from conversation if no proposal found
+      if (!requestedDateIso) {
+        requestedDateIso = getRequestedDateFromConversation(
+          uiMessages,
+          lastUserText,
+          todayIso
+        );
+      }
       const requestedDateDmy = formatDateDMY(requestedDateIso);
 
       const facilityQuestionText =

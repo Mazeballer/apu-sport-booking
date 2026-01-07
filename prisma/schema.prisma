@@ -120,7 +120,7 @@ model EquipmentRequestItem {
   dismissed   Boolean               @default(false)
   issuedAt    DateTime?
   qtyReturned Int                   @default(0)
-  equipment   Equipment             @relation(fields: [equipmentId], references: [id])
+  equipment   Equipment             @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   request     EquipmentRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@unique([requestId, equipmentId])
