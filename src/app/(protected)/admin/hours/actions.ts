@@ -101,6 +101,8 @@ export async function updateFacilityHours(
     }
 
     revalidatePath("/admin");
+    revalidatePath("/staff");
+    revalidatePath("/");
     return { ok: true };
   } catch (e: any) {
     return { ok: false, message: e?.message ?? "Failed to update hours" };

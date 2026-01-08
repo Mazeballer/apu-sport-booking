@@ -1,4 +1,7 @@
 import { redirect } from "next/navigation";
+
+// Force dynamic rendering to ensure fresh data on every request
+export const dynamic = "force-dynamic";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

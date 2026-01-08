@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,8 @@ export function OperatingHoursManagement({
 }: {
   facilities: Facility[];
 }) {
+  const router = useRouter();
+  
   // one state object for all facilities
   const [hours, setHours] = useState<
     Record<string, { openTime: string; closeTime: string }>
@@ -51,10 +54,11 @@ export function OperatingHoursManagement({
 
     if (actionState.ok) {
       notify.success("Operating hours saved successfully");
+      router.refresh();
     } else {
       notify.error("An error occurred while saving changes.");
     }
-  }, [actionState]);
+  }, [actionState, router]);
 
   return (
     <div className="space-y-4">

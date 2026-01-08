@@ -21,6 +21,7 @@ export async function approveEquipmentRequest(id: string) {
     },
   });
   revalidatePath("/staff");
+  revalidatePath("/admin");
 }
 
 export async function denyEquipmentRequest(id: string) {
@@ -38,4 +39,5 @@ export async function denyEquipmentRequest(id: string) {
     },
   });
   revalidatePath("/staff");
+  revalidatePath("/admin");
 }

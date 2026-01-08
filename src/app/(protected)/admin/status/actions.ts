@@ -15,4 +15,5 @@ export async function dismissEquipmentStatusItem(itemId: string) {
   });
 
   revalidatePath("/admin");
+  revalidatePath("/staff");
 }

@@ -37,7 +37,6 @@ This will also automatically generate the Prisma client (via the `postinstall` s
 
 Ensure your PostgreSQL database is running and the `DATABASE_URL` in `.env` is correct.
 
-
 ### 3. Run the Development Server
 
 ```bash
@@ -50,15 +49,15 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start development server |
-| `pnpm build` | Build for production |
-| `pnpm start` | Start production server |
-| `pnpm lint` | Run ESLint |
-| `pnpm prisma studio` | Open Prisma database GUI |
-| `pnpm prisma db push` | Push schema changes to database |
-| `pnpm prisma generate` | Regenerate Prisma client |
+| Command                | Description                     |
+| ---------------------- | ------------------------------- |
+| `pnpm dev`             | Start development server        |
+| `pnpm build`           | Build for production            |
+| `pnpm start`           | Start production server         |
+| `pnpm lint`            | Run ESLint                      |
+| `pnpm prisma studio`   | Open Prisma database GUI        |
+| `pnpm prisma db push`  | Push schema changes to database |
+| `pnpm prisma generate` | Regenerate Prisma client        |
 
 ---
 
@@ -93,8 +92,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Login Credentials
 
-| Role | Email | Password |
-|------|-------|----------|
-| **Admin** | admin@gmail.com | Testing123 |
-| **Staff** | staff@mail.apu.edu.my | staff123 |
-| **Student** | dleong45@gmail.com | Testing123 |
+| Role        | Email                 | Password   |
+| ----------- | --------------------- | ---------- |
+| **Admin**   | admin@gmail.com       | Testing123 |
+| **Staff**   | staff@mail.apu.edu.my | staff123   |
+| **Student** | dleong45@gmail.com    | Testing123 |

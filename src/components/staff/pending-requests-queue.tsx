@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -43,6 +44,7 @@ type PendingRequestsQueueProps = {
 export function PendingRequestsQueue({
   initialRequests,
 }: PendingRequestsQueueProps) {
+  const router = useRouter();
   const [pendingRequests, setPendingRequests] =
     React.useState<PendingRequest[]>(initialRequests);
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
@@ -63,6 +65,7 @@ export function PendingRequestsQueue({
         // Optimistic update on the client side
         setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
         notify.success("Equipment request approved");
+        router.refresh();
       } catch (error) {
         console.error(error);
         notify.error("Could not approve this request. Please try again.");
@@ -84,7 +87,8 @@ export function PendingRequestsQueue({
 
         setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
 
-        notify.error("Equipment request denied");
+        notify.info("Equipment request denied");
+        router.refresh();
       } catch (error) {
         console.error(error);
 

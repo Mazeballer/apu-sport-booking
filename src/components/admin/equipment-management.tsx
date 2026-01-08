@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, startTransition, useActionState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,6 +88,7 @@ export function EquipmentManagement({
   equipment?: EquipmentRow[];
 }) {
   const isMobile = useIsMobile();
+  const router = useRouter();
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<EquipmentRow | null>(
@@ -207,6 +209,7 @@ export function EquipmentManagement({
       setIsAddOpen(false);
       setEditingEquipment(null);
       resetForm();
+      router.refresh();
     } else {
       notify.error(upsertState.message ?? "Could not save");
     }
@@ -221,13 +224,14 @@ export function EquipmentManagement({
 
     if (deleteState.ok) {
       notify.success("Equipment deleted");
+      router.refresh();
     } else {
       notify.error(deleteState.message ?? "Delete failed");
     }
     setDeletingEquipment(null);
     setIsDeleting(false);
     setLastAction(null);
-  }, [deleteState, lastAction]);
+  }, [deleteState, lastAction, router]);
 
   return (
     <div className="space-y-6">

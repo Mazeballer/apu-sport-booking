@@ -133,6 +133,7 @@ export async function createFacilityAction(raw: FacilityInput) {
 
   revalidateTag(FACILITY_TAG);
   revalidatePath("/admin");
+  revalidatePath("/");
 }
 
 export async function updateFacilityAction(raw: FacilityInput) {
@@ -182,11 +183,14 @@ export async function updateFacilityAction(raw: FacilityInput) {
 
   revalidateTag(FACILITY_TAG);
   revalidatePath("/admin");
+  revalidatePath("/");
 }
 
 export async function deleteFacilityAction(id: string) {
   await prisma.facility.delete({ where: { id } });
+  revalidateTag(FACILITY_TAG);
   revalidatePath("/admin");
+  revalidatePath("/");
 }
 
 export async function toggleFacilityActiveAction(id: string, active: boolean) {
@@ -212,7 +216,9 @@ export async function toggleFacilityActiveAction(id: string, active: boolean) {
     },
   });
 
+  revalidateTag(FACILITY_TAG);
   revalidatePath("/admin");
+  revalidatePath("/");
 }
 
 // fetch the freshest copy of a facility for the Edit dialog
