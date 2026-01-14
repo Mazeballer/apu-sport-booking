@@ -675,13 +675,16 @@ In your reply:
 
     /* 3.95 Date-only follow up after facility already chosen: go straight into booking flow */
     if (!dynamicContext && isDateOnlyMessage(lastUserText)) {
+      console.log("[DEBUG] Date-only message detected:", lastUserText);
       const lastFacilityId = getLastFacilityIdFromConversation(
         uiMessages,
         allFacilities
       );
+      console.log("[DEBUG] Found facility ID from conversation:", lastFacilityId);
       const lastFacility = lastFacilityId
         ? allFacilities.find((f) => f.id === lastFacilityId)
         : null;
+      console.log("[DEBUG] Matched facility:", lastFacility?.name);
 
       if (lastFacility) {
         const requestedDateIso = getRequestedDateFromConversation(
@@ -689,7 +692,7 @@ In your reply:
           lastUserText,
           todayIso
         );
-
+        console.log("[DEBUG] Requested date ISO:", requestedDateIso);
         const data = await getFacilityAvailabilityById(
           lastFacility.id,
           requestedDateIso
@@ -701,8 +704,12 @@ In your reply:
           }" on ${formatDateDMY(requestedDateIso)}.`;
         } else {
           const { facility, courts, bookings, date } = data;
+          console.log("[DEBUG] Facility data:", { name: facility.name, openTime: facility.openTime, closeTime: facility.closeTime });
+          console.log("[DEBUG] Courts:", courts.map(c => c.name));
+          console.log("[DEBUG] Date:", date);
           const dateDmy = formatDateDMY(date);
           const nowMy = getMalaysiaNow();
+          console.log("[DEBUG] Now (MY):", nowMy.toISOString());
 
           const lines: string[] = [];
 
@@ -713,6 +720,7 @@ In your reply:
 
             const openTime = facility.openTime ?? "08:00";
             const closeTime = facility.closeTime ?? "22:00";
+            console.log("[DEBUG] Computing free hours for", court.name, "with openTime:", openTime, "closeTime:", closeTime);
 
             // List 1-hour start times for display
             const free = computeFreeHours(
@@ -723,6 +731,7 @@ In your reply:
               nowMy,
               1
             );
+            console.log("[DEBUG] Free slots for", court.name, ":", free);
 
             if (free.length === 0) continue;
 

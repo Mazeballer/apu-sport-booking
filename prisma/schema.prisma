@@ -3,47 +3,47 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 /// Users
 model User {
-  id        String             @id @default(uuid())
-  email     String             @unique
-  role      Role               @default(student)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  authId    String?            @unique
-  name      String             @default("")
-  bookings  Booking[]
-  decisions EquipmentRequest[] @relation("Decider")
-  pushSubs  PushSubscription[] 
+  id               String                @id @default(uuid())
+  email            String                @unique
+  role             Role                  @default(student)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  authId           String?               @unique
+  name             String                @default("")
+  bookings         Booking[]
+  decisions        EquipmentRequest[]    @relation("Decider")
+  pushSubs         PushSubscription[]
   chatMinuteLimits ChatRateLimitMinute[]
   chatDayLimits    ChatRateLimitDay[]
-
 }
 
 model Facility {
-  id             String      @id @default(uuid())
-  name           String
-  type           String
-  location       String
-  rules          String?
-  photos         String[]
-  active         Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-  capacity       Int         @default(0)
-  closeTime      String?
-  description    String?
-  isMultiSport   Boolean     @default(false)
-  locationType   String      @default("Indoor")
-  numberOfCourts Int         @default(1)
-  openTime       String?
-  sharedSports   String[]    @default([])
-  bookings       Booking[]
-  courts         Court[]
-  equipment      Equipment[]
+  id               String                    @id @default(uuid())
+  name             String
+  type             String
+  location         String
+  rules            String?
+  photos           String[]
+  active           Boolean                   @default(true)
+  createdAt        DateTime                  @default(now())
+  capacity         Int                       @default(0)
+  closeTime        String?
+  description      String?
+  isMultiSport     Boolean                   @default(false)
+  locationType     String                    @default("Indoor")
+  numberOfCourts   Int                       @default(1)
+  openTime         String?
+  sharedSports     String[]                  @default([])
+  bookings         Booking[]
+  courts           Court[]
+  equipment        Equipment[]
   notificationLogs FacilityNotificationLog[]
 }
 
@@ -142,11 +142,11 @@ model PushSubscription {
 model FacilityNotificationLog {
   id         String   @id @default(uuid())
   facilityId String
-  kind       String   // "closed", "reopened", "hours_changed"
+  kind       String // "closed", "reopened", "hours_changed"
   createdAt  DateTime @default(now())
   processed  Boolean  @default(false)
 
-  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
 
   @@index([facilityId, kind, createdAt])
   @@index([processed, createdAt])
@@ -166,9 +166,9 @@ model ChatRateLimitMinute {
 }
 
 model ChatRateLimitDay {
-  userId   String
-  dayKey   String // "YYYY-MM-DD" in Malaysia time
-  count    Int      @default(0)
+  userId    String
+  dayKey    String // "YYYY-MM-DD" in Malaysia time
+  count     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -177,7 +177,6 @@ model ChatRateLimitDay {
   @@id([userId, dayKey])
   @@index([dayKey])
 }
-
 
 /// ===========================
 /// Enums

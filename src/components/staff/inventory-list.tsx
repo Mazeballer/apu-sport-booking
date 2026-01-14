@@ -118,7 +118,7 @@ export function InventoryList({
                 ? facilityNameById.get(eq.facilityId) ?? "—"
                 : "—";
               const percent =
-                eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
+                eq.qtyTotal > 0 ? Math.min(100, Math.max(0, (eq.qtyAvailable / eq.qtyTotal) * 100)) : 0;
 
               return (
                 <TableRow key={eq.id}>
@@ -181,7 +181,7 @@ export function InventoryList({
             ? facilityNameById.get(eq.facilityId) ?? "—"
             : "—";
           const percent =
-            eq.qtyTotal > 0 ? (eq.qtyAvailable / eq.qtyTotal) * 100 : 0;
+            eq.qtyTotal > 0 ? Math.min(100, Math.max(0, (eq.qtyAvailable / eq.qtyTotal) * 100)) : 0;
 
           return (
             <Card key={eq.id} className="p-4">

@@ -109,11 +109,11 @@ export function EquipmentManagement({
   });
 
   // Server actions via React.useActionState
-  const [upsertState, upsertDispatch] = useActionState<ActionResult, FormData>(
+  const [upsertState, upsertDispatch, isUpsertPending] = useActionState<ActionResult, FormData>(
     upsertEquipment,
     { ok: true }
   );
-  const [deleteState, deleteDispatch] = useActionState<ActionResult, FormData>(
+  const [deleteState, deleteDispatch, isDeletePending] = useActionState<ActionResult, FormData>(
     deleteEquipmentAction,
     { ok: true }
   );
@@ -199,9 +199,10 @@ export function EquipmentManagement({
     });
   };
 
-  // React to action results
+  // React to action results - trigger when pending state changes to false
   useEffect(() => {
     if (lastAction !== "upsert") return;
+    if (isUpsertPending) return; // Still pending, wait
     if (!upsertState) return;
 
     if (upsertState.ok) {
@@ -216,10 +217,11 @@ export function EquipmentManagement({
     setSaving(false);
     setLastAction(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [upsertState]);
+  }, [isUpsertPending, upsertState]);
 
   useEffect(() => {
     if (lastAction !== "delete") return;
+    if (isDeletePending) return; // Still pending, wait
     if (!deleteState) return;
 
     if (deleteState.ok) {
@@ -231,7 +233,7 @@ export function EquipmentManagement({
     setDeletingEquipment(null);
     setIsDeleting(false);
     setLastAction(null);
-  }, [deleteState, lastAction, router]);
+  }, [deleteState, lastAction, router, isDeletePending]);
 
   return (
     <div className="space-y-6">
@@ -279,7 +281,7 @@ export function EquipmentManagement({
         <div className="space-y-4">
           {equipment.map((eq) => {
             const facility = facilities.find((f) => f.id === eq.facilityId);
-            const stockPercent = (eq.qtyAvailable / eq.qtyTotal) * 100;
+            const stockPercent = eq.qtyTotal > 0 ? Math.min(100, Math.max(0, (eq.qtyAvailable / eq.qtyTotal) * 100)) : 0;
             return (
               <Card
                 key={eq.id}
@@ -394,7 +396,7 @@ export function EquipmentManagement({
           <TableBody>
             {equipment.map((eq) => {
               const facility = facilities.find((f) => f.id === eq.facilityId);
-              const stockPercent = (eq.qtyAvailable / eq.qtyTotal) * 100;
+              const stockPercent = eq.qtyTotal > 0 ? Math.min(100, Math.max(0, (eq.qtyAvailable / eq.qtyTotal) * 100)) : 0;
 
               return (
                 <TableRow

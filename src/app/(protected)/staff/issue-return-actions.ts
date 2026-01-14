@@ -74,72 +74,72 @@ export async function issueEquipmentFromCounter(input: {
         },
       });
 
-      const prevQty = existing?.qty ?? 0;
       const nextQty = item.qty;
+      const isFirstIssue = !existing?.issuedAt;
 
-      // This makes it safe on retries: same qty again = delta 0, no second deduction.
-      const delta = nextQty - prevQty;
+      if (isFirstIssue) {
+        // First time issuing - decrement by the full quantity being issued
+        if (eq.qtyAvailable < nextQty) {
+          throw new Error(`Not enough ${eq.name} available`);
+        }
 
-      if (delta < 0) {
-        // Safer to block reductions here, returns should handle reductions
-        throw new Error(
-          `Cannot reduce issued quantity for ${eq.name}. Use return processing instead.`
-        );
-      }
+        await tx.equipment.update({
+          where: { id: eq.id },
+          data: { qtyAvailable: { decrement: nextQty } },
+        });
 
-      if (delta === 0) {
-        // Same quantity, but we still need to set issuedAt if not already set
-        // AND decrement inventory if this is the first time issuing
-        if (existing && !existing.issuedAt) {
-          // Check inventory availability
-          if (eq.qtyAvailable < nextQty) {
-            throw new Error(`Not enough ${eq.name} available`);
-          }
-          
-          // Decrement inventory for first-time issue
-          await tx.equipment.update({
-            where: { id: eq.id },
-            data: { qtyAvailable: { decrement: nextQty } },
-          });
-          
+        if (existing) {
+          // Update existing request item (created during booking)
           await tx.equipmentRequestItem.update({
             where: { id: existing.id },
             data: {
+              qty: nextQty,
               issuedAt: new Date(),
               dismissed: false,
             },
           });
+        } else {
+          // Create new request item
+          await tx.equipmentRequestItem.create({
+            data: {
+              requestId: req.id,
+              equipmentId: eq.id,
+              qty: nextQty,
+              qtyReturned: 0,
+              issuedAt: new Date(),
+            },
+          });
         }
-        continue;
-      }
+      } else {
+        // Already issued before - only decrement the additional amount (delta)
+        const prevQty = existing.qty;
+        const delta = nextQty - prevQty;
 
-      if (eq.qtyAvailable < delta) {
-        throw new Error(`Not enough ${eq.name} available`);
-      }
+        if (delta < 0) {
+          throw new Error(
+            `Cannot reduce issued quantity for ${eq.name}. Use return processing instead.`
+          );
+        }
 
-      // Deduct only the delta (prevents double-issue bug)
-      await tx.equipment.update({
-        where: { id: eq.id },
-        data: { qtyAvailable: { decrement: delta } },
-      });
+        if (delta === 0) {
+          // Same quantity, nothing to do
+          continue;
+        }
 
-      if (existing) {
+        if (eq.qtyAvailable < delta) {
+          throw new Error(`Not enough ${eq.name} available`);
+        }
+
+        await tx.equipment.update({
+          where: { id: eq.id },
+          data: { qtyAvailable: { decrement: delta } },
+        });
+
         await tx.equipmentRequestItem.update({
           where: { id: existing.id },
           data: {
             qty: nextQty,
-            issuedAt: existing.issuedAt ?? new Date(),
             dismissed: false,
-          },
-        });
-      } else {
-        await tx.equipmentRequestItem.create({
-          data: {
-            requestId: req.id,
-            equipmentId: eq.id,
-            qty: nextQty,
-            qtyReturned: 0,
-            issuedAt: new Date(),
           },
         });
       }
@@ -207,13 +207,10 @@ export async function returnEquipmentFromCounter(input: {
         },
       });
     } else if (input.condition === "lost" || input.condition === "damaged" || input.condition === "not_returned") {
-      // Lost, damaged, and not_returned items are removed from total inventory
-      await tx.equipment.update({
-        where: { id: item.equipmentId },
-        data: {
-          qtyTotal: { decrement: qty },
-        },
-      });
+      // Lost, damaged, and not_returned items stay out of available inventory.
+      // They were already subtracted from qtyAvailable when issued.
+      // We do NOT add them back to available, and we do NOT touch qtyTotal.
+      // No inventory update needed here.
     }
 
     const newQtyReturned = item.qtyReturned + qty;
