@@ -577,8 +577,9 @@ export function FacilitiesManagement({
                     {facility.isMultiSport &&
                     facility.courts?.[0]?.supportedSports?.length ? (
                       <div className="flex flex-wrap gap-1">
-                        {facility.courts[0].supportedSports!.map(
-                          (sport: SportType) => (
+                        {facility.courts[0].supportedSports
+                          .filter((sport: SportType) => sport !== facility.type)
+                          .map((sport: SportType) => (
                             <Badge
                               key={sport}
                               variant="outline"
@@ -586,8 +587,7 @@ export function FacilitiesManagement({
                             >
                               {sport}
                             </Badge>
-                          )
-                        )}
+                          ))}
                       </div>
                     ) : null}
                   </div>

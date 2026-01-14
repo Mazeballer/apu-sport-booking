@@ -187,7 +187,30 @@ export async function updateFacilityAction(raw: FacilityInput) {
 }
 
 export async function deleteFacilityAction(id: string) {
-  await prisma.facility.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    // Get all equipment IDs for this facility
+    const equipment = await tx.equipment.findMany({
+      where: { facilityId: id },
+      select: { id: true },
+    });
+    const equipmentIds = equipment.map((e) => e.id);
+
+    // Delete equipment request items that reference this facility's equipment
+    if (equipmentIds.length > 0) {
+      await tx.equipmentRequestItem.deleteMany({
+        where: { equipmentId: { in: equipmentIds } },
+      });
+    }
+
+    // Delete equipment (will also cascade delete any remaining references)
+    await tx.equipment.deleteMany({
+      where: { facilityId: id },
+    });
+
+    // Delete the facility (courts will cascade delete due to onDelete: Cascade)
+    await tx.facility.delete({ where: { id } });
+  });
+
   revalidateTag(FACILITY_TAG);
   revalidatePath("/admin");
   revalidatePath("/");

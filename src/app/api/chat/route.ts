@@ -543,6 +543,71 @@ In your reply:
       );
     }
 
+    /* 2.3 My Bookings query - handle early, before other "show" patterns */
+    if (!dynamicContext && isMyBookingsQuestion) {
+      const userBookings = await prisma.booking.findMany({
+        where: {
+          userId: current.id,
+          status: { in: ["confirmed", "rescheduled"] },
+          end: { gte: new Date() }, // Only future/current bookings
+        },
+        include: {
+          facility: { select: { name: true } },
+          court: { select: { name: true } },
+        },
+        orderBy: { start: "asc" },
+        take: 10,
+      });
+
+      if (userBookings.length === 0) {
+        dynamicContext = `
+The user asked about their bookings.
+
+You have no upcoming bookings at the moment.
+
+In your reply:
+- Tell the user they don't have any upcoming bookings.
+- Offer to help them make a new booking.
+        `.trim();
+      } else {
+        const bookingList = userBookings
+          .map((b, i) => {
+            const dateStr = b.start.toLocaleDateString("en-GB", { 
+              timeZone: "Asia/Kuala_Lumpur",
+              weekday: "short",
+              day: "2-digit", 
+              month: "short", 
+              year: "numeric" 
+            });
+            const timeStr = b.start.toLocaleTimeString("en-GB", { 
+              timeZone: "Asia/Kuala_Lumpur",
+              hour: "2-digit", 
+              minute: "2-digit",
+              hour12: false
+            });
+            const endTimeStr = b.end.toLocaleTimeString("en-GB", { 
+              timeZone: "Asia/Kuala_Lumpur",
+              hour: "2-digit", 
+              minute: "2-digit",
+              hour12: false
+            });
+            return `${i + 1}. **${b.facility.name}** (${b.court.name})\n   Date: ${dateStr}\n   Time: ${timeStr} - ${endTimeStr}`;
+          })
+          .join("\n\n");
+
+        dynamicContext = `
+The user asked about their bookings. Here are their upcoming bookings:
+
+${bookingList}
+
+In your reply:
+- Present the bookings in a clear, readable format.
+- Mention the total count (${userBookings.length} booking${userBookings.length > 1 ? "s" : ""}).
+- If they want to cancel or reschedule, tell them to visit the My Bookings page.
+        `.trim();
+      }
+    }
+
     /* 2.5 Show all available time slots during booking flow */
     if (!dynamicContext && isShowAllSlotsRequest && isBookingConversation) {
       const lastFacilityId = getLastFacilityIdFromConversation(uiMessages, allFacilities);
@@ -657,6 +722,7 @@ In your reply:
       }
     }
 
+
     /* 3.9 Availability menu choice, ask for date only */
     const availabilityMenuRegex =
       /^(check availability|availability|check available times)$/i;
@@ -675,16 +741,13 @@ In your reply:
 
     /* 3.95 Date-only follow up after facility already chosen: go straight into booking flow */
     if (!dynamicContext && isDateOnlyMessage(lastUserText)) {
-      console.log("[DEBUG] Date-only message detected:", lastUserText);
       const lastFacilityId = getLastFacilityIdFromConversation(
         uiMessages,
         allFacilities
       );
-      console.log("[DEBUG] Found facility ID from conversation:", lastFacilityId);
       const lastFacility = lastFacilityId
         ? allFacilities.find((f) => f.id === lastFacilityId)
         : null;
-      console.log("[DEBUG] Matched facility:", lastFacility?.name);
 
       if (lastFacility) {
         const requestedDateIso = getRequestedDateFromConversation(
@@ -692,7 +755,6 @@ In your reply:
           lastUserText,
           todayIso
         );
-        console.log("[DEBUG] Requested date ISO:", requestedDateIso);
         const data = await getFacilityAvailabilityById(
           lastFacility.id,
           requestedDateIso
@@ -704,12 +766,8 @@ In your reply:
           }" on ${formatDateDMY(requestedDateIso)}.`;
         } else {
           const { facility, courts, bookings, date } = data;
-          console.log("[DEBUG] Facility data:", { name: facility.name, openTime: facility.openTime, closeTime: facility.closeTime });
-          console.log("[DEBUG] Courts:", courts.map(c => c.name));
-          console.log("[DEBUG] Date:", date);
           const dateDmy = formatDateDMY(date);
           const nowMy = getMalaysiaNow();
-          console.log("[DEBUG] Now (MY):", nowMy.toISOString());
 
           const lines: string[] = [];
 
@@ -720,7 +778,6 @@ In your reply:
 
             const openTime = facility.openTime ?? "08:00";
             const closeTime = facility.closeTime ?? "22:00";
-            console.log("[DEBUG] Computing free hours for", court.name, "with openTime:", openTime, "closeTime:", closeTime);
 
             // List 1-hour start times for display
             const free = computeFreeHours(
@@ -731,7 +788,6 @@ In your reply:
               nowMy,
               1
             );
-            console.log("[DEBUG] Free slots for", court.name, ":", free);
 
             if (free.length === 0) continue;
 
@@ -1144,37 +1200,35 @@ You requested a duration that is not allowed. Please specify either 1 hour or 2 
 
               if (suggestion.isExactMatch) {
                 dynamicContext = `
-This is a NEW booking request. No booking has been created yet.
+**Booking in Progress** - Still collecting details
 
-**Booking Details:**
 - Facility: ${suggestion.facilityName}
 - Date: ${formatDateDMY(suggestion.date)}
 - Time: ${suggestion.suggestedTimeLabel}
 - Court: ${suggestion.courtName}
-- Duration: _Not selected yet_
-- Equipment: _Not selected yet_
 
-**Choose duration:** 1 hour or 2 hours
+**Still needed:**
+1. Duration (1 hour or 2 hours)
+2. Equipment choice
 
 ${equipmentSection}
 
 In your reply:
-- Do NOT say the user already has a booking or has booked.
-- Show the Booking Details exactly as above using bullet points.
-- Ask for duration and equipment selection clearly.
-- Format the equipment choices as a numbered list.
+- Show the booking details collected so far.
+- Ask for BOTH duration and equipment choice in ONE message.
+- Do NOT ask them to confirm yet - wait until they provide both.
+- Format: "Please choose: 1 or 2 hours, and your equipment preference."
                 `.trim();
               } else {
                 // Requested time is not available - show clear message with alternatives
-                // We need to get the available times from the booking suggestion data
                 const requestedTimeDisplay = suggestion.requestedTimeLabel ?? "the requested time";
                 
                 dynamicContext = `
-The **${requestedTimeDisplay}** slot is already booked.
+The **${requestedTimeDisplay}** slot is not available.
 
-**Nearest available time:** ${suggestion.suggestedTimeLabel}
+**Next available time:** ${suggestion.suggestedTimeLabel}
 
-📋 **Suggested Booking:**
+Alternative booking option:
 - Facility: ${suggestion.facilityName}
 - Date: ${formatDateDMY(suggestion.date)}
 - Time: ${suggestion.suggestedTimeLabel}
@@ -1182,40 +1236,39 @@ The **${requestedTimeDisplay}** slot is already booked.
 
 ${equipmentSection}
 
-If you want **${suggestion.suggestedTimeLabel}**, reply with your preferred duration (1 or 2 hours) and equipment choice.
-
-If you want a **different time**, just tell me the time you prefer and I'll check if it's available.
-
 In your reply:
-- Clearly state that the requested time (${requestedTimeDisplay}) is already booked.
-- Offer the suggested time ${suggestion.suggestedTimeLabel} as an alternative.
-- Ask if they want the suggested time OR let them specify a different time.
-- Do NOT create any booking yet.
+- Tell the user that ${requestedTimeDisplay} is not available.
+- Suggest ${suggestion.suggestedTimeLabel} as an alternative.
+- Ask: "Would you like ${suggestion.suggestedTimeLabel} instead? If so, please also tell me your duration (1 or 2 hours) and equipment choice."
+- Do NOT ask for confirmation yet.
                 `.trim();
               }
             } else if (!hasEquipmentDecision && facilityForPrompt.equipmentNames.length > 0) {
-              // Has duration but needs equipment choice - show summary and ask for equipment + confirm
+              // Has duration but needs equipment choice
               const durationLabel =
                 suggestion.durationHours === 2 ? "2 hours" : "1 hour";
 
-              const availableEquipInline = facilityForPrompt.equipmentNames.join(", ");
+              const equipmentChoices = [...facilityForPrompt.equipmentNames, "No equipment"]
+                .map((e, i) => `${i + 1}. ${e}`)
+                .join("\n");
 
               dynamicContext = `
-This is a NEW booking request. No booking has been created yet.
+**Almost ready!** Just need your equipment choice.
 
-Proposed booking:
-- **Facility:** ${suggestion.facilityName}
-- **Date:** ${formatDateDMY(suggestion.date)}
-- **Time:** ${suggestion.suggestedTimeLabel}
-- **Court:** ${suggestion.courtName}
-- **Duration:** ${durationLabel}
-- **Available Equipment:** ${availableEquipInline}
+Booking details so far:
+- Facility: ${suggestion.facilityName}
+- Date: ${formatDateDMY(suggestion.date)}
+- Time: ${suggestion.suggestedTimeLabel}
+- Court: ${suggestion.courtName}
+- Duration: ${durationLabel}
+
+**Choose equipment:**
+${equipmentChoices}
 
 In your reply:
-- Do NOT say the user already has a booking or has already booked.
-- Show the proposed booking details above.
-- Ask which equipment they want from the list above, or "no equipment".
-- Tell them to type **confirm** after choosing equipment to create the booking, or **cancel** to stop.
+- Show the booking details above.
+- Ask which equipment they want, or if they want no equipment.
+- Once they choose, THEN you can ask them to confirm.
               `.trim();
             } else {
               const durationLabel =
