@@ -138,6 +138,12 @@ CRITICAL ANTI-HALLUCINATION RULES
    - Use bullet points when listing multiple courts, times, or equipment.
 
 15. FINAL CHECK: Before responding, verify every facility name, time, date, court, and equipment you mention appears EXACTLY in the SOURCE OF TRUTH. If not, remove it from your response.
+
+16. TIME SLOTS - CRITICAL:
+   - ONLY display time slots that appear EXACTLY in the SOURCE OF TRUTH data.
+   - NEVER generate, guess, or invent time slots (like 00:00, 01:00, 02:00, etc.) from memory.
+   - Facilities operate during specific hours (typically 08:00-22:00). Do NOT show times outside operating hours.
+   - If no times are listed in the data, say no slots are available - do NOT make up times.
 `.trim();
 }
 
@@ -651,10 +657,13 @@ In your reply:
             lines.push(`**${court.name}:**\n${free.map((t) => `• ${t}`).join("\n")}`);
           }
 
+          const displayOpenTime = facility.openTime ?? "08:00";
+          const displayCloseTime = facility.closeTime ?? "22:00";
+
           if (lines.length === 0) {
-            dynamicContext = `📅 **${facility.name}** on ${dateDmy}\n\nNo available slots remaining for this date. Please try another date.`;
+            dynamicContext = `📅 **${facility.name}** on ${dateDmy}\n\n**Operating Hours:** ${displayOpenTime} to ${displayCloseTime}\n\nNo available slots remaining for this date. Please try another date.`;
           } else {
-            dynamicContext = `📅 **${facility.name}** on ${dateDmy}\n\n${lines.join("\n\n")}\n\nReply with a time, duration (1 or 2 hours), and equipment choice to book.`;
+            dynamicContext = `📅 **${facility.name}** on ${dateDmy}\n\n**Operating Hours:** ${displayOpenTime} to ${displayCloseTime}\n\n**Available times (EXACT - show only these):**\n${lines.join("\n\n")}\n\nReply with a time (from the list above only), duration (1 or 2 hours), and equipment choice to book.`;
           }
         } else {
           dynamicContext = `I couldn't retrieve availability for ${lastFacility.name}. Please try again.`;
@@ -824,20 +833,27 @@ In your reply:
                 ? `**Equipment options:**\n${equipmentList}`
                 : "No equipment available (bring your own if needed)";
 
+            const displayOpenTime = facility.openTime ?? "08:00";
+            const displayCloseTime = facility.closeTime ?? "22:00";
+
             dynamicContext = `
 ${facility.name} on ${dateDmy}
 
-**Available times:**
+**Operating Hours:** ${displayOpenTime} to ${displayCloseTime}
+
+**Available times (EXACT - DO NOT MODIFY):**
 ${lines.join("\n\n")}
 
 ${equipmentSection}
 
 In your reply:
-- Show the available times grouped by court.
+- Show ONLY the EXACT available times listed above. Do NOT add, remove, or change any times.
+- Group times by court exactly as shown.
 - Show the equipment options as a numbered list.
 - Ask the user to reply with: time, duration (1 or 2 hours), and equipment choice.
 - Do not ask for the facility again.
 - Do not ask for the date again.
+- IMPORTANT: Never invent or guess time slots. Only use the times listed above.
             `.trim();
           }
         }
@@ -1012,20 +1028,27 @@ ${lines.length === 0 ? "No available slots remaining." : lines.join("\n\n")}
                 ? `**Equipment options:**\n${equipmentList}`
                 : "No equipment available (bring your own if needed)";
 
+            const displayOpenTime = facility.openTime ?? "08:00";
+            const displayCloseTime = facility.closeTime ?? "22:00";
+
             dynamicContext = `
 ${facility.name} on ${dateDmy}
 
-**Available times:**
+**Operating Hours:** ${displayOpenTime} to ${displayCloseTime}
+
+**Available times (EXACT - DO NOT MODIFY):**
 ${lines.join("\n\n")}
 
 ${equipmentSection}
 
 In your reply:
-- Show the available times grouped by court.
+- Show ONLY the EXACT available times listed above. Do NOT add, remove, or change any times.
+- Group times by court exactly as shown.
 - Show the equipment options as a numbered list.
 - Ask the user to reply with: time, duration (1 or 2 hours), and equipment choice.
 - Do not ask for the facility again.
 - Do not ask for the date again.
+- IMPORTANT: Never invent or guess time slots. Only use the times listed above.
             `.trim();
           }
         }
