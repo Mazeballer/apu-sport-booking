@@ -100,45 +100,79 @@ function endOfMalaysiaWeek(d: Date): Date {
   return sundayDate;
 }
 
+export type BookingLimitResult = 
+  | { ok: true }
+  | { ok: false; message: string };
+
+/**
+ * Check if a user has reached their booking limits.
+ * Returns a result object instead of throwing to prevent SSR errors.
+ */
+export async function checkBookingLimit(args: {
+  userId: string;
+  start: Date;
+}): Promise<BookingLimitResult> {
+  try {
+    const { userId, start } = args;
+
+    const dayStart = startOfMalaysiaDay(start);
+    const dayEnd = endOfMalaysiaDay(start);
+
+    const weekStart = startOfMalaysiaWeek(start);
+    const weekEnd = endOfMalaysiaWeek(start);
+
+    // Per-day limit
+    const dayCount = await prisma.booking.count({
+      where: {
+        userId,
+        status: { in: ["confirmed", "rescheduled"] },
+        start: { gte: dayStart, lte: dayEnd },
+      },
+    });
+
+    if (dayCount >= MAX_PER_DAY) {
+      return {
+        ok: false,
+        message: "You have reached the maximum of 2 bookings for this day.",
+      };
+    }
+
+    // Per-week limit
+    const weekCount = await prisma.booking.count({
+      where: {
+        userId,
+        status: { in: ["confirmed", "rescheduled"] },
+        start: { gte: weekStart, lte: weekEnd },
+      },
+    });
+
+    if (weekCount >= MAX_PER_WEEK) {
+      return {
+        ok: false,
+        message: "You have reached the maximum of 7 active bookings for this week.",
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    console.error("[checkBookingLimit] Error:", error);
+    return {
+      ok: false,
+      message: "Unable to verify booking limits. Please try again.",
+    };
+  }
+}
+
+/**
+ * @deprecated Use checkBookingLimit instead for better error handling.
+ * Kept for backward compatibility with page.tsx.
+ */
 export async function assertBookingLimit(args: {
   userId: string;
   start: Date;
 }) {
-  const { userId, start } = args;
-
-  const dayStart = startOfMalaysiaDay(start);
-  const dayEnd = endOfMalaysiaDay(start);
-
-  const weekStart = startOfMalaysiaWeek(start);
-  const weekEnd = endOfMalaysiaWeek(start);
-
-  // Per-day limit
-  const dayCount = await prisma.booking.count({
-    where: {
-      userId,
-      status: { in: ["confirmed", "rescheduled"] },
-      start: { gte: dayStart, lte: dayEnd },
-    },
-  });
-
-  if (dayCount >= MAX_PER_DAY) {
-    throw new BookingLimitError(
-      "You have reached the maximum of 2 bookings for this day."
-    );
-  }
-
-  // Per-week limit
-  const weekCount = await prisma.booking.count({
-    where: {
-      userId,
-      status: { in: ["confirmed", "rescheduled"] },
-      start: { gte: weekStart, lte: weekEnd },
-    },
-  });
-
-  if (weekCount >= MAX_PER_WEEK) {
-    throw new BookingLimitError(
-      "You have reached the maximum of 7 active bookings for this week."
-    );
+  const result = await checkBookingLimit(args);
+  if (!result.ok) {
+    throw new BookingLimitError(result.message);
   }
 }

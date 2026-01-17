@@ -16,7 +16,7 @@ import {
 } from "@/lib/ai/book-facility";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/authz";
-import { assertBookingLimit, BookingLimitError } from "@/lib/booking-limits";
+import { checkBookingLimit } from "@/lib/booking-limits";
 import { normalizeUserText } from "@/lib/ai/chat/normalize";
 import {
   getMalaysiaNow,
@@ -462,22 +462,18 @@ You requested a duration that is not allowed. Please specify either 1 hour or 2 
                   `${suggestion.date}T${suggestion.suggestedTimeLabel}:00+08:00`
                 );
 
-                try {
-                  await assertBookingLimit({
-                    userId: current.id,
-                    start: startForLimit,
-                  });
-                } catch (e: unknown) {
-                  const msg =
-                    e instanceof BookingLimitError
-                      ? e.message
-                      : "Booking could not be created. Please try again.";
+                // Check booking limits using result-based function (no exceptions)
+                const limitCheck = await checkBookingLimit({
+                  userId: current.id,
+                  start: startForLimit,
+                });
 
-                  // Set dynamicContext so LLM can respond properly
+                if (!limitCheck.ok) {
+                  // Set dynamicContext so LLM can respond properly with limit message
                   dynamicContext = `
 **Booking Limit Reached**
 
-${msg}
+${limitCheck.message}
 
 In your reply:
 - Inform the user they have reached their booking limit.
