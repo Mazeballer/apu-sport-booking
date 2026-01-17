@@ -232,12 +232,14 @@ export async function getBookingSuggestionFromQuestion(
   const closeTime = facility.closeTime ?? "22:00";
 
   // Free one hour slots for that court on that date
+  // Use Malaysia time to correctly filter past slots
+  const nowMy = getMalaysiaNow();
   const freeSlots = computeFreeHours(
     openTime,
     closeTime,
     date,
     courtBookings,
-    new Date()
+    nowMy
   );
 
   if (freeSlots.length === 0) {
