@@ -1,9 +1,24 @@
 // src/lib/ai/free-slots.ts
-import { format, eachHourOfInterval } from "date-fns";
+import { eachHourOfInterval } from "date-fns";
 
 function toMY(date: string, timeHHmm: string): Date {
   // Force Malaysia time to avoid server timezone issues
   return new Date(`${date}T${timeHHmm}:00+08:00`);
+}
+
+/**
+ * Format a Date to "HH:mm" in Malaysia time (UTC+8).
+ * This avoids date-fns's format() which uses the server's local timezone.
+ */
+function formatMalaysiaTime(date: Date): string {
+  // Get hours and minutes in Malaysia timezone
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kuala_Lumpur",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return formatter.format(date);
 }
 
 function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
@@ -27,7 +42,14 @@ export function computeFreeHours(
     (slot) => slot.getTime() < end.getTime()
   );
 
-  const todayString = format(now, "yyyy-MM-dd");
+  // Format date in Malaysia time (not using date-fns to avoid server timezone issues)
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuala_Lumpur",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const todayString = dateFormatter.format(now);
   const isToday = date === todayString;
 
   return hours
@@ -49,5 +71,5 @@ export function computeFreeHours(
 
       return true;
     })
-    .map((slotStart) => format(slotStart, "HH:mm"));
+    .map((slotStart) => formatMalaysiaTime(slotStart));
 }
